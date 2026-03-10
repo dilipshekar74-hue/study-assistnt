@@ -23,7 +23,14 @@ def check_password():
     password_input = st.text_input("Enter the password to access your assistant:", type="password")
 
     if password_input:
-        if password_input == st.secrets["8050721321@Ai"]:
+        # Check Environment Variable (GitHub) first, fallback to Streamlit secrets
+        correct_password = os.getenv("APP_PASSWORD") or st.secrets.get("APP_PASSWORD")
+        
+        if not correct_password:
+            st.error("Configuration Error: APP_PASSWORD is not set in the environment or secrets.")
+            return False
+
+        if password_input == correct_password:
             st.session_state["password_correct"] = True
             st.rerun()
         else:
@@ -51,7 +58,15 @@ def add_task(task_name: str, days_from_now: int) -> str:
 if check_password():
     
     st.title("🎓 Unit Study Assistant")
-    client = genai.Client(api_key=st.secrets[""])
+    
+    # Check Environment Variable (GitHub) first, fallback to Streamlit secrets
+    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
+    
+    if not api_key:
+        st.error("🚨 API Key is missing! Make sure GEMINI_API_KEY is set in your GitHub Secrets or Streamlit secrets.")
+        st.stop() # Stops the app from running further and crashing
+        
+    client = genai.Client(api_key=api_key)
 
     # --- THE SIDEBAR ---
     with st.sidebar:
@@ -185,7 +200,7 @@ if check_password():
                     data=response.text,
                     file_name="study_notes.txt",
                     mime="text/plain",
-                    key=f"download_{len(st.session_state.messages)}" # Ensures a unique button key
+                    key=f"download_{len(st.session_state.messages)}" 
                 )
                 
             st.session_state.messages.append({"role": "assistant", "content": response.text})
