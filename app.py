@@ -1,6 +1,7 @@
 import streamlit as st
 from google import genai
 from google.genai import types
+from openai import OpenAI
 import tempfile
 import os
 import pandas as pd
@@ -23,14 +24,7 @@ def check_password():
     password_input = st.text_input("Enter the password to access your assistant:", type="password")
 
     if password_input:
-        # Check Environment Variable (GitHub) first, fallback to Streamlit secrets
-        correct_password = os.getenv("APP_PASSWORD") or st.secrets.get("APP_PASSWORD")
-        
-        if not correct_password:
-            st.error("Configuration Error: APP_PASSWORD is not set in the environment or secrets.")
-            return False
-
-        if password_input == correct_password:
+        if password_input == st.secrets["APP_PASSWORD"]:
             st.session_state["password_correct"] = True
             st.rerun()
         else:
@@ -52,21 +46,32 @@ def add_task(task_name: str, days_from_now: int) -> str:
     st.session_state.schedule = pd.concat([st.session_state.schedule, new_task], ignore_index=True)
     return f"Successfully added '{task_name}' due on {due_date}."
 
+def generate_image_tool(prompt_description: str) -> str:
+    """Generates an image based on a detailed prompt description.
+
+    Args:
+        prompt_description: A detailed description of the requested image, 
+                           specifying composition, style, and core subjects.
+    """
+    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    
+    with st.spinner("Drawing image..."):
+        response = openai_client.images.generate(
+            model="dall-e-3",
+            prompt=prompt_description,
+            n=1,
+            size="1024x1024",
+            quality="standard",
+        )
+    return response.data[0].url
+
 # ==========================================
 # 4. THE MAIN APPLICATION
 # ==========================================
 if check_password():
     
     st.title("🎓 Unit Study Assistant")
-    
-    # Check Environment Variable (GitHub) first, fallback to Streamlit secrets
-    api_key = os.getenv("GEMINI_API_KEY") or st.secrets.get("GEMINI_API_KEY")
-    
-    if not api_key:
-        st.error("🚨 API Key is missing! Make sure GEMINI_API_KEY is set in your GitHub Secrets or Streamlit secrets.")
-        st.stop() # Stops the app from running further and crashing
-        
-    client = genai.Client(api_key=api_key)
+    client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
     # --- THE SIDEBAR ---
     with st.sidebar:
@@ -93,7 +98,7 @@ if check_password():
             st.session_state.messages = []
             st.session_state.ai_files = []
             if "chat_session" in st.session_state:
-                del st.session_state.chat_session # Will be recreated on next run
+                del st.session_state.chat_session
             st.rerun()
             
         st.divider()
@@ -129,30 +134,42 @@ if check_password():
     with tab1:
         current_schedule_text = st.session_state.schedule.to_string()
 
-        # Initialize Memory and Brain
+        # Initialize Memory and Brain (Equipped with TWO tools now)
         if "chat_session" not in st.session_state:
             st.session_state.chat_session = client.chats.create(
                 model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(
-                    system_instruction=f"You are a helpful college study assistant. Analyze documents to answer questions. Always organize your answers using clear headings, bulleted lists, and tables where appropriate. Here is the user's current schedule:\n{current_schedule_text}\nManage their tasks if asked.",
-                    tools=[add_task]
+                    system_instruction=f"""
+                        You are a helpful college study assistant. Analyze documents to answer questions. 
+                        Always organize text answers using clear headings and tables where appropriate. 
+                        
+                        Here is the user's current schedule:\n{current_schedule_text}\nManage their tasks if asked.
+                        
+                        You have access to the `generate_image_tool`. If the user asks for a diagram, map, 
+                        brainstorm visual, or any picture, you must call this tool. 
+                        When you call this tool, your FINAL text response must ONLY be the raw URL returned 
+                        by the tool, starting with 'https://', with absolutely no other text, polite phrases, or formatting.
+                    """,
+                    tools=[add_task, generate_image_tool]
                 )
             )
 
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # Display Chat History
+        # Display Chat History (Handles Images vs Text)
         for msg in st.session_state.messages:
             avatar_icon = "🧑‍💻" if msg["role"] == "user" else "🦉"
             with st.chat_message(msg["role"], avatar=avatar_icon):
-                st.markdown(msg["content"])
+                if msg.get("is_image"):
+                    st.image(msg["content"], caption="Generated by Study Assistant")
+                else:
+                    st.markdown(msg["content"])
 
-        # Voice Input Handling
+        # Voice/Text Input Handling
         audio_value = st.audio_input("Record a voice command")
-        user_text_input = st.chat_input("Or type a question here...")
+        user_text_input = st.chat_input("E.g., Draw a diagram of the solar system...")
         
-        # Decide which input was used (Voice or Text)
         user_input = None
         is_audio = False
         
@@ -176,7 +193,7 @@ if check_password():
                 message_bundle = st.session_state.ai_files.copy()
                 
                 if is_audio:
-                    with st.spinner("Listening and thinking..."):
+                    with st.spinner("Listening..."):
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
                             temp_audio.write(user_input.read())
                             temp_audio_path = temp_audio.name
@@ -192,18 +209,29 @@ if check_password():
                         message_bundle,
                         config=types.GenerateContentConfig(temperature=creativity_level)
                     )
-                st.markdown(response.text)
                 
-                # Add Download Button
-                st.download_button(
-                    label="💾 Download this response",
-                    data=response.text,
-                    file_name="study_notes.txt",
-                    mime="text/plain",
-                    key=f"download_{len(st.session_state.messages)}" 
-                )
-                
-            st.session_state.messages.append({"role": "assistant", "content": response.text})
+                # Intercept the response to check if it's an image URL or standard text
+                if response.text.strip().startswith("https://"):
+                    st.image(response.text.strip(), caption="Generated by Study Assistant")
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": response.text.strip(),
+                        "is_image": True
+                    })
+                else:
+                    st.markdown(response.text)
+                    st.download_button(
+                        label="💾 Download this response",
+                        data=response.text,
+                        file_name="study_notes.txt",
+                        mime="text/plain",
+                        key=f"download_{len(st.session_state.messages)}" 
+                    )
+                    st.session_state.messages.append({
+                        "role": "assistant", 
+                        "content": response.text,
+                        "is_image": False
+                    })
             
             if is_audio:
                 os.remove(temp_audio_path)
