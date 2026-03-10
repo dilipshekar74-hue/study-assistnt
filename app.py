@@ -51,7 +51,7 @@ def add_task(task_name: str, days_from_now: int) -> str:
 if check_password():
     
     st.title("🎓 Unit Study Assistant")
-    client = genai.Client(api_key=st.secrets["AIzaSyD8i9tmDAns0yl_6t9OujHcIqDKXd1CdTo"])
+    client = genai.Client(api_key=st.secrets[""])
 
     # --- THE SIDEBAR ---
     with st.sidebar:
