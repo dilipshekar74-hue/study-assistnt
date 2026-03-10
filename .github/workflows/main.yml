@@ -1,0 +1,29 @@
+name: API Integration Test
+
+on:
+  push:
+    branches:
+      - main
+
+jobs:
+  run-api-script:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.10'
+
+      - name: Run my script
+        # Map the GitHub secrets and vars to environment variables for this step
+        env:
+          MY_API_KEY: ${{ secrets.MY_API_KEY }}
+          BASE_URL: ${{ vars.API_BASE_URL }}
+        run: |
+          echo "Connecting to the API at $BASE_URL..."
+          # The API key is securely passed to the Python script below
+          python my_script.py
