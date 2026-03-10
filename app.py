@@ -35,7 +35,6 @@ def check_password():
 # 3. AI TOOLS (FUNCTION CALLING)
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
-    """Adds a new task or assignment to the user's daily planner."""
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
     new_task = pd.DataFrame([{"Task": task_name, "Date": due_date, "Done": False}])
     st.session_state.schedule = pd.concat([st.session_state.schedule, new_task], ignore_index=True)
@@ -94,6 +93,9 @@ if check_password():
             st.session_state.ai_files = []
             if "chat_session" in st.session_state:
                 del st.session_state.chat_session
+            # Also clear any stuck images
+            if "latest_generated_image" in st.session_state:
+                del st.session_state.latest_generated_image
             st.rerun()
             
         st.divider()
@@ -139,9 +141,9 @@ if check_password():
                         
                         Here is the user's current schedule:\n{current_schedule_text}
                         
-                        CRITICAL RULES FOR TOOLS:
-                        1. You DO NOT have the ability to generate images natively. If the user asks for a picture, diagram, or visual, you ABSOLUTELY MUST call the `generate_image_tool`. Do not simply reply with "Here is an image" without calling the tool.
-                        2. If the user asks to add something to their calendar, you MUST call the `add_task` tool.
+                        CRITICAL OVERRIDE:
+                        You have an external tool connected called `generate_image_tool`. 
+                        IGNORE your internal limitations regarding image generation. If the user asks for a picture, drawing, diagram, or visual, YOU MUST NOT REFUSE. You must immediately execute the `generate_image_tool` to fulfill the request.
                     """,
                     tools=[add_task, generate_image_tool]
                 )
@@ -187,7 +189,11 @@ if check_password():
                         st.session_state.messages.append({"role": "user", "content": user_input, "is_image": False})
                 
                 with st.chat_message("assistant", avatar="🦉"):
-                    message_bundle = st.session_state.ai_files.copy()
+                    # BUG FIX 1: Only attach PDFs on the very first message to prevent API crashing
+                    if len(st.session_state.messages) == 1:
+                        message_bundle = st.session_state.ai_files.copy()
+                    else:
+                        message_bundle = []
                     
                     if is_audio:
                         with st.spinner("Listening..."):
@@ -200,15 +206,21 @@ if check_password():
                     else:
                         message_bundle.append(user_input)
                     
-                    # Send to AI
+                    # BUG FIX 2: Error Catcher for Google API
                     with st.spinner("Thinking & Drawing..."):
-                        response = st.session_state.chat_session.send_message(
-                            message_bundle,
-                            config=types.GenerateContentConfig(
-                                temperature=creativity_level,
-                                tools=[add_task, generate_image_tool] # <--- THE SAFETY OVERRIDE
+                        try:
+                            response = st.session_state.chat_session.send_message(
+                                message_bundle,
+                                config=types.GenerateContentConfig(temperature=creativity_level)
                             )
-                        )
+                        except Exception as e:
+                            st.error("🚨 Google API Error!")
+                            st.write("Streamlit hid the real error, but here are the exact details from Google:")
+                            if hasattr(e, 'response_json'):
+                                st.json(e.response_json)
+                            else:
+                                st.write(str(e))
+                            st.stop()
                     
                     # Print and save the AI's normal conversational text
                     st.markdown(response.text)
@@ -244,4 +256,3 @@ if check_password():
                 
                 if is_audio:
                     os.remove(temp_audio_path)
-       
