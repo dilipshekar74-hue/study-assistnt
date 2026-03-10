@@ -129,19 +129,19 @@ if check_password():
     with tab1:
         current_schedule_text = st.session_state.schedule.to_string()
 
-        # 1. Initialize Memory and Brain
+        # 1. Initialize Memory and Brain (WITH STRICT NEW RULES)
         if "chat_session" not in st.session_state:
             st.session_state.chat_session = client.chats.create(
                 model="gemini-2.5-flash",
                 config=types.GenerateContentConfig(
                     system_instruction=f"""
                         You are a helpful college study assistant. Analyze documents to answer questions. 
-                        Always organize text answers using clear headings and tables where appropriate. 
                         
-                        Here is the user's current schedule:\n{current_schedule_text}\nManage their tasks if asked.
+                        Here is the user's current schedule:\n{current_schedule_text}
                         
-                        You have access to the `generate_image_tool`. If the user asks for a diagram, map, 
-                        brainstorm visual, or any picture, you must call this tool. 
+                        CRITICAL RULES FOR TOOLS:
+                        1. You DO NOT have the ability to generate images natively. If the user asks for a picture, diagram, or visual, you ABSOLUTELY MUST call the `generate_image_tool`. Do not simply reply with "Here is an image" without calling the tool.
+                        2. If the user asks to add something to their calendar, you MUST call the `add_task` tool.
                     """,
                     tools=[add_task, generate_image_tool]
                 )
@@ -150,7 +150,6 @@ if check_password():
         if "messages" not in st.session_state:
             st.session_state.messages = []
 
-        # --- THE FIX: Create a "safe zone" container for the chat ---
         chat_container = st.container()
 
         # 2. Display Chat History INSIDE the safe container
@@ -163,7 +162,7 @@ if check_password():
                     else:
                         st.markdown(msg["content"])
 
-        # 3. The Input Widgets (These stay at the bottom, outside the container)
+        # 3. The Input Widgets 
         audio_value = st.audio_input("Record a voice command")
         user_text_input = st.chat_input("E.g., Draw a diagram of the solar system...")
         
@@ -178,7 +177,6 @@ if check_password():
             
         # 4. Process the Input
         if user_input:
-            # Force new messages to draw INSIDE the safe container
             with chat_container:
                 with st.chat_message("user", avatar="🧑‍💻"):
                     if is_audio:
@@ -203,10 +201,13 @@ if check_password():
                         message_bundle.append(user_input)
                     
                     # Send to AI
-                    with st.spinner("Thinking..."):
+                    with st.spinner("Thinking & Drawing..."):
                         response = st.session_state.chat_session.send_message(
                             message_bundle,
-                            config=types.GenerateContentConfig(temperature=creativity_level)
+                            config=types.GenerateContentConfig(
+                                temperature=creativity_level,
+                                tools=[add_task, generate_image_tool] # <--- THE SAFETY OVERRIDE
+                            )
                         )
                     
                     # Print and save the AI's normal conversational text
@@ -243,3 +244,4 @@ if check_password():
                 
                 if is_audio:
                     os.remove(temp_audio_path)
+       
