@@ -27,5 +27,5 @@ If you want to clone this repository and run it on your own machine, follow thes
 
 1. **Clone the repository:**
    ```bash
-   git clone [https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git](https://github.com/YOUR-USERNAME/YOUR-REPO-NAME.git)
-   cd YOUR-REPO-NAME
+   git [(https://github.com/dilipshekar74-hue/study-assistnt.git)]
+   cd study-assistant
