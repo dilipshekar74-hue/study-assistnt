@@ -23,7 +23,7 @@ def check_password():
     password_input = st.text_input("Enter the password to access your assistant:", type="password")
 
     if password_input:
-        if password_input == st.secrets["APP_PASSWORD"]:
+        if password_input == st.secrets["8050721321@Ai"]:
             st.session_state["password_correct"] = True
             st.rerun()
         else:
