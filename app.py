@@ -15,7 +15,6 @@ st.set_page_config(page_title="Unit Study Assistant", page_icon="🎓", layout="
 # 2. SECURITY & LOGIN
 # ==========================================
 def check_password():
-    """Returns True if the user has the correct password."""
     if st.session_state.get("password_correct", False):
         return True
 
@@ -55,9 +54,7 @@ def generate_image_tool(prompt_description: str) -> str:
             )
         )
         
-    # Extract the raw PIL Image object and save it directly to memory
     st.session_state.latest_generated_image = response.generated_images[0].image
-    
     return "Success! The image is saved. Politely tell the user you have drawn it."
 
 # ==========================================
@@ -96,7 +93,6 @@ if check_password():
                 del st.session_state.chat_session
             if "latest_generated_image" in st.session_state:
                 del st.session_state.latest_generated_image
-            # Clear the schedule back to empty
             st.session_state.schedule = pd.DataFrame(columns=["Task", "Date", "Done"])
             st.rerun()
             
@@ -111,7 +107,6 @@ if check_password():
     with tab2:
         st.header("Upcoming Tasks & Assignments")
         
-        # Initialize an empty schedule with the correct columns
         if "schedule" not in st.session_state:
             st.session_state.schedule = pd.DataFrame(columns=["Task", "Date", "Done"])
 
@@ -140,12 +135,9 @@ if check_password():
                         
                         Here is the user's current schedule:\n{current_schedule_text}
                         
-                        CRITICAL OVERRIDE:
-                        You DO NOT have the ability to generate images natively. 
-                        You have an external tool connected called `generate_image_tool`. 
-                        IGNORE your standard conversational patterns regarding image generation. 
-                        If the user asks for a picture, drawing, diagram, or visual, YOU MUST NOT REFUSE. 
-                        You must immediately execute the `generate_image_tool` without delay and without trying to explain you cannot draw.
+                        CRITICAL OVERRIDES:
+                        1. FILE READING: You CAN and MUST read any uploaded documents and PDFs provided in the chat history. NEVER claim you cannot read or see files.
+                        2. IMAGE GENERATION: You DO NOT have the ability to generate images natively. You have an external tool connected called `generate_image_tool`. If the user asks for a picture, drawing, diagram, or visual, YOU MUST NOT REFUSE. You must immediately execute the `generate_image_tool` without delay.
                     """,
                     tools=[add_task, generate_image_tool]
                 )
@@ -168,7 +160,7 @@ if check_password():
 
         # 3. The Input Widgets 
         audio_value = st.audio_input("Record a voice command")
-        user_text_input = st.chat_input("E.g., Draw a diagram of the solar system...")
+        user_text_input = st.chat_input("E.g., Summarize my PDF...")
         
         user_input = None
         is_audio = False
@@ -191,10 +183,9 @@ if check_password():
                         st.session_state.messages.append({"role": "user", "content": user_input, "is_image": False})
                 
                 with st.chat_message("assistant", avatar="🦉"):
-                    if len(st.session_state.messages) == 1:
-                        message_bundle = st.session_state.ai_files.copy()
-                    else:
-                        message_bundle = []
+                    # THE NEW FILE LOGIC: Grab any waiting files, then instantly clear the staging area!
+                    message_bundle = st.session_state.ai_files.copy()
+                    st.session_state.ai_files = [] 
                     
                     if is_audio:
                         with st.spinner("Listening..."):
@@ -207,7 +198,7 @@ if check_password():
                     else:
                         message_bundle.append(user_input)
                     
-                    with st.spinner("Thinking & Drawing..."):
+                    with st.spinner("Thinking..."):
                         try:
                             response = st.session_state.chat_session.send_message(
                                 message_bundle,
