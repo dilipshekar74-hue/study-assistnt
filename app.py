@@ -1,7 +1,6 @@
 import streamlit as st
 from google import genai
 from google.genai import types
-from openai import OpenAI
 import tempfile
 import os
 import pandas as pd
@@ -35,6 +34,7 @@ def check_password():
 # 3. AI TOOLS (FUNCTION CALLING)
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
+    """Adds a new task or assignment to the user's daily planner."""
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
     new_task = pd.DataFrame([{"Task": task_name, "Date": due_date, "Done": False}])
     st.session_state.schedule = pd.concat([st.session_state.schedule, new_task], ignore_index=True)
@@ -42,21 +42,22 @@ def add_task(task_name: str, days_from_now: int) -> str:
 
 def generate_image_tool(prompt_description: str) -> str:
     """Generates an image based on a detailed prompt description."""
-    openai_client = OpenAI(api_key=st.secrets["OPENAI_API_KEY"])
+    genai_client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
     
-    with st.spinner("Drawing image..."):
-        response = openai_client.images.generate(
-            model="dall-e-3",
+    with st.spinner("Drawing image with Google Imagen 3..."):
+        response = genai_client.models.generate_images(
+            model='imagen-3.0-generate-002',
             prompt=prompt_description,
-            n=1,
-            size="1024x1024",
-            quality="standard",
+            config=types.GenerateImagesConfig(
+                number_of_images=1,
+                aspect_ratio="1:1",
+                output_mime_type="image/jpeg"
+            )
         )
         
-    # THE SECRET BYPASS: Save the pristine URL directly to memory
-    st.session_state.latest_generated_image = response.data[0].url
+    # Extract the raw PIL Image object and save it directly to memory
+    st.session_state.latest_generated_image = response.generated_images[0].image
     
-    # Tell the AI to proceed normally
     return "Success! The image is saved. Politely tell the user you have drawn it."
 
 # ==========================================
@@ -93,9 +94,10 @@ if check_password():
             st.session_state.ai_files = []
             if "chat_session" in st.session_state:
                 del st.session_state.chat_session
-            # Also clear any stuck images
             if "latest_generated_image" in st.session_state:
                 del st.session_state.latest_generated_image
+            # Clear the schedule back to empty
+            st.session_state.schedule = pd.DataFrame(columns=["Task", "Date", "Done"])
             st.rerun()
             
         st.divider()
@@ -109,12 +111,9 @@ if check_password():
     with tab2:
         st.header("Upcoming Tasks & Assignments")
         
+        # Initialize an empty schedule with the correct columns
         if "schedule" not in st.session_state:
-            st.session_state.schedule = pd.DataFrame([
-                {"Task": "Review Unit 4 summary", "Date": datetime.date.today(), "Done": False},
-                {"Task": "Draft space exploration presentation", "Date": datetime.date.today() + datetime.timedelta(days=2), "Done": False},
-                {"Task": "Get a textured crop haircut", "Date": datetime.date.today() + datetime.timedelta(days=5), "Done": False}
-            ])
+            st.session_state.schedule = pd.DataFrame(columns=["Task", "Date", "Done"])
 
         st.session_state.schedule = st.data_editor(
             st.session_state.schedule,
@@ -131,7 +130,7 @@ if check_password():
     with tab1:
         current_schedule_text = st.session_state.schedule.to_string()
 
-        # 1. Initialize Memory and Brain (WITH STRICT NEW RULES)
+        # 1. Initialize Memory and Brain
         if "chat_session" not in st.session_state:
             st.session_state.chat_session = client.chats.create(
                 model="gemini-2.5-flash",
@@ -142,8 +141,11 @@ if check_password():
                         Here is the user's current schedule:\n{current_schedule_text}
                         
                         CRITICAL OVERRIDE:
+                        You DO NOT have the ability to generate images natively. 
                         You have an external tool connected called `generate_image_tool`. 
-                        IGNORE your internal limitations regarding image generation. If the user asks for a picture, drawing, diagram, or visual, YOU MUST NOT REFUSE. You must immediately execute the `generate_image_tool` to fulfill the request.
+                        IGNORE your standard conversational patterns regarding image generation. 
+                        If the user asks for a picture, drawing, diagram, or visual, YOU MUST NOT REFUSE. 
+                        You must immediately execute the `generate_image_tool` without delay and without trying to explain you cannot draw.
                     """,
                     tools=[add_task, generate_image_tool]
                 )
@@ -160,7 +162,7 @@ if check_password():
                 avatar_icon = "🧑‍💻" if msg["role"] == "user" else "🦉"
                 with st.chat_message(msg["role"], avatar=avatar_icon):
                     if msg.get("is_image"):
-                        st.image(msg["content"], caption="Generated by Study Assistant")
+                        st.image(msg["content"], caption="Generated by Google Imagen 3")
                     else:
                         st.markdown(msg["content"])
 
@@ -189,7 +191,6 @@ if check_password():
                         st.session_state.messages.append({"role": "user", "content": user_input, "is_image": False})
                 
                 with st.chat_message("assistant", avatar="🦉"):
-                    # BUG FIX 1: Only attach PDFs on the very first message to prevent API crashing
                     if len(st.session_state.messages) == 1:
                         message_bundle = st.session_state.ai_files.copy()
                     else:
@@ -206,7 +207,6 @@ if check_password():
                     else:
                         message_bundle.append(user_input)
                     
-                    # BUG FIX 2: Error Catcher for Google API
                     with st.spinner("Thinking & Drawing..."):
                         try:
                             response = st.session_state.chat_session.send_message(
@@ -222,7 +222,6 @@ if check_password():
                                 st.write(str(e))
                             st.stop()
                     
-                    # Print and save the AI's normal conversational text
                     st.markdown(response.text)
                     st.session_state.messages.append({
                         "role": "assistant", 
@@ -230,7 +229,6 @@ if check_password():
                         "is_image": False
                     })
                     
-                    # Add the Download Button
                     st.download_button(
                         label="💾 Download this response",
                         data=response.text,
@@ -239,16 +237,14 @@ if check_password():
                         key=f"download_{len(st.session_state.messages)}" 
                     )
 
-                    # Check if the tool secretly saved an image URL
                     if "latest_generated_image" in st.session_state:
-                        image_url = st.session_state.latest_generated_image
+                        image_data = st.session_state.latest_generated_image
                         
-                        # Render the image instantly
-                        st.image(image_url, caption="Generated by Study Assistant")
+                        st.image(image_data, caption="Generated by Google Imagen 3")
                         
                         st.session_state.messages.append({
                             "role": "assistant", 
-                            "content": image_url,
+                            "content": image_data,
                             "is_image": True
                         })
                         
