@@ -6,3 +6,4 @@ yfinance
 youtube-transcript-api
 pillow
 gTTS
+supabase
