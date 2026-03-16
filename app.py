@@ -4,6 +4,7 @@ from google.genai import types
 from duckduckgo_search import DDGS
 import yfinance as yf
 from youtube_transcript_api import YouTubeTranscriptApi
+from PIL import Image
 import tempfile
 import os
 import pandas as pd
@@ -16,7 +17,6 @@ import sqlite3
 st.set_page_config(page_title="Unit Study Assistant", page_icon="🎓", layout="centered")
 
 def init_db():
-    """Initializes the SQLite database for permanent task storage."""
     conn = sqlite3.connect('planner.db')
     c = conn.cursor()
     c.execute('''CREATE TABLE IF NOT EXISTS tasks (Task TEXT, Date TEXT, Done BOOLEAN)''')
@@ -84,7 +84,6 @@ def get_youtube_transcript(video_url: str) -> str:
 with st.sidebar:
     st.header("🔐 Account Setup")
     
-    # Show Login Form if NOT logged in
     if not st.session_state.get("password_correct", False):
         with st.form("sidebar_login_form"):
             username_input = st.text_input("Username").strip()
@@ -96,7 +95,6 @@ with st.sidebar:
                 st.session_state["password_correct"] = True
                 st.session_state["current_user"] = username_input 
                 
-                # Log the entry
                 timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                 log_entry = f"{timestamp},{username_input}\n"
                 with open("login_logs.csv", "a") as file:
@@ -105,7 +103,6 @@ with st.sidebar:
             else:
                 st.error("Incorrect username or password.")
                 
-    # Show Logout and Tools if LOGGED IN
     else:
         st.success(f"Welcome back, **{st.session_state.current_user}**!")
         if st.button("🚪 Logout", use_container_width=True):
@@ -141,7 +138,6 @@ with st.sidebar:
         st.divider()
         creativity_level = st.slider("Creativity Level (Temperature)", 0.0, 1.0, 0.3, 0.1)
 
-        # ADMIN LOGS
         if st.session_state.current_user == "admin":
             st.divider()
             if st.button("📂 View Login Logs", use_container_width=True):
@@ -156,12 +152,10 @@ with st.sidebar:
 # ==========================================
 st.title("🎓 Unit Study Assistant (Pro)")
 
-# Stop rendering the rest of the page if not logged in
 if not st.session_state.get("password_correct", False):
     st.info("👈 Please log in using the sidebar to access your study assistant.")
     st.stop()
 
-# --- Everything below this line only runs if logged in ---
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Permanent Planner"])
@@ -204,7 +198,8 @@ with tab1:
                     3. WEB SEARCH: Use `web_search_tool` for current events or unknown facts.
                     4. MARKET DATA: Use `get_market_data` for stock queries. Remember to append '.NS' for Indian stocks.
                     5. YOUTUBE: Use `get_youtube_transcript` if the user provides a YouTube link.
-                    6. FLASHCARDS: If the user asks for flashcards, output pure CSV format (Term,Definition) so they can save it cleanly.
+                    6. FLASHCARDS: If the user asks for flashcards, output pure CSV format (Term,Definition).
+                    7. VISION: You can see images uploaded by the user. Analyze them carefully.
                 """,
                 tools=[add_task, generate_image_tool, web_search_tool, get_market_data, get_youtube_transcript]
             )
@@ -216,24 +211,35 @@ with tab1:
     with chat_container:
         for msg in st.session_state.messages:
             with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🦉"):
-                if msg.get("is_image"): st.image(msg["content"])
+                if msg.get("is_image"): st.image(msg["content"], width=300)
                 else: st.markdown(msg["content"])
 
+    # --- THE NEW CAMERA WIDGET ---
+    with st.expander("📸 Take a Picture (Notes, Whiteboards, Math Problems)"):
+        camera_photo = st.camera_input("Snap a photo to send to the AI")
+
     audio_value = st.audio_input("Record a voice command")
-    user_text_input = st.chat_input("E.g., Summarize this YouTube link, or check Nifty 50...")
+    user_text_input = st.chat_input("E.g., Solve the math problem in the photo...")
     user_input = audio_value if audio_value else user_text_input
     is_audio = bool(audio_value)
         
     if user_input:
         with chat_container:
             with st.chat_message("user", avatar="🧑‍💻"):
+                message_bundle = st.session_state.ai_files.copy()
+                st.session_state.ai_files = [] 
+                
+                # Check if a camera photo was taken!
+                if camera_photo:
+                    img = Image.open(camera_photo)
+                    st.image(img, caption="Camera Upload", width=300)
+                    st.session_state.messages.append({"role": "user", "content": img, "is_image": True})
+                    message_bundle.append(img)
+                
                 st.markdown("🎤 *Sent an audio message*" if is_audio else user_input)
                 st.session_state.messages.append({"role": "user", "content": "🎤 *Sent an audio message*" if is_audio else user_input, "is_image": False})
             
             with st.chat_message("assistant", avatar="🦉"):
-                message_bundle = st.session_state.ai_files.copy()
-                st.session_state.ai_files = [] 
-                
                 if is_audio:
                     with st.spinner("Listening..."):
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
@@ -264,7 +270,7 @@ with tab1:
                 )
 
                 if "latest_generated_image" in st.session_state:
-                    st.image(st.session_state.latest_generated_image, caption="Generated by Google Imagen 3")
+                    st.image(st.session_state.latest_generated_image, caption="Generated by Google Imagen 3", width=300)
                     st.session_state.messages.append({"role": "assistant", "content": st.session_state.latest_generated_image, "is_image": True})
                     del st.session_state.latest_generated_image
             
