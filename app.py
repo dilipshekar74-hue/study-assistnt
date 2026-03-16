@@ -23,11 +23,26 @@ def apply_indian_theme():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Rozha+One&display=swap');
 
+        /* Force Sandalwood Background WITH a subtle texture */
         .stApp {
             background-color: #FDFBF7;
             background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
             background-attachment: fixed;
         }
+
+        /* --- VISIBILITY FIX --- 
+           Force all regular text, lists, and markdown to be a deep Henna brown */
+        p, li, span, label, div[data-testid="stMarkdownContainer"] {
+            color: #2D1A11 !important;
+        }
+
+        /* Force input text boxes to have dark text and white backgrounds */
+        input, textarea, [data-baseweb="input"] {
+            color: #2D1A11 !important;
+            background-color: #FFFFFF !important;
+            -webkit-text-fill-color: #2D1A11 !important;
+        }
+        /* ----------------------- */
 
         [data-testid="stSidebar"] {
             background-color: #F4EFE6 !important;
@@ -35,7 +50,7 @@ def apply_indian_theme():
             border-right: 2px solid #E37D00;
         }
 
-        h1, h2, h3 {
+        h1, h2, h3, h4, h5, h6 {
             font-family: 'Rozha One', serif !important;
             color: #8B0000 !important; 
         }
@@ -65,15 +80,15 @@ def apply_indian_theme():
         .stButton>button {
             border-radius: 20px;
             border: 1px solid #E37D00;
-            background-color: #FEF9F0;
-            color: #8B0000;
+            background-color: #FEF9F0 !important;
+            color: #8B0000 !important;
             transition: all 0.3s ease;
         }
         .stButton>button:hover {
             box-shadow: 0px 4px 10px rgba(227, 125, 0, 0.4);
             transform: translateY(-2px);
-            border: 1px solid #8B0000;
-            color: #E37D00;
+            border: 1px solid #8B0000 !important;
+            color: #E37D00 !important;
         }
         </style>
     """, unsafe_allow_html=True)
@@ -210,7 +225,6 @@ with st.sidebar:
         st.header("🎛️ AI Settings")
         creativity_level = st.slider("Creativity Level", 0.0, 1.0, 0.3, 0.1)
         
-        # --- NEW VOICE TOGGLE ---
         enable_voice = st.toggle("🔊 Enable AI Voice Response", value=False)
 
         if st.session_state.current_user == "admin":
@@ -287,7 +301,6 @@ with tab1:
                 if msg.get("is_image"): st.image(msg["content"], width=300)
                 else: st.markdown(msg["content"])
                 
-                # Render previous audio files if they exist in history
                 if msg.get("audio_file"):
                     st.audio(msg["audio_file"], format="audio/mp3")
 
@@ -346,19 +359,15 @@ with tab1:
                 
                 st.markdown(response.text)
                 
-                # --- NEW: TEXT-TO-SPEECH LOGIC ---
                 audio_path_to_save = None
                 if enable_voice:
                     with st.spinner("Generating voice..."):
-                        # 'tld=co.in' gives the voice an Indian accent!
                         tts = gTTS(text=response.text.replace('*', ''), lang='en', tld='co.in')
                         temp_tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
                         tts.save(temp_tts_file.name)
                         audio_path_to_save = temp_tts_file.name
-                        # Autoplay the audio immediately
                         st.audio(temp_tts_file.name, format="audio/mp3", autoplay=True)
                 
-                # Save the message and the audio file to history
                 st.session_state.messages.append({
                     "role": "assistant", 
                     "content": response.text, 
