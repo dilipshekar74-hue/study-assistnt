@@ -270,11 +270,21 @@ with tab2:
     
     if not edited_df.equals(df):
         for index, row in edited_df.iterrows():
-            if pd.notna(row.get('id')): 
-                supabase.table("tasks").update({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).eq("id", row["id"]).execute()
-            else:
-                # NEW: Tag manually typed rows with the username too!
-                supabase.table("tasks").insert({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"]), "username": current_username}).execute()
+            # FIX: Only save to the database if the 'task' box is actually filled out!
+            if pd.notna(row.get("task")) and str(row.get("task")).strip() != "":
+                if pd.notna(row.get('id')): 
+                    supabase.table("tasks").update({
+                        "task": str(row["task"]), 
+                        "date": str(row["date"]), 
+                        "done": bool(row["done"])
+                    }).eq("id", row["id"]).execute()
+                else:
+                    supabase.table("tasks").insert({
+                        "task": str(row["task"]), 
+                        "date": str(row["date"]), 
+                        "done": bool(row["done"]), 
+                        "username": current_username
+                    }).execute()
         st.rerun()
 
 with tab1:
