@@ -12,7 +12,7 @@ import os
 import pandas as pd
 import datetime
 import random 
-import hashlib # <-- NEW: For encrypting user passwords!
+import hashlib 
 
 # ==========================================
 # 1. PAGE SETUP & UI THEME
@@ -103,7 +103,6 @@ def init_connection():
 supabase: Client = init_connection()
 
 def hash_password(password):
-    """Encrypts the password before saving it to the database."""
     return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
@@ -164,12 +163,10 @@ with st.sidebar:
     st.title("🕉️ Ved.ai")
     st.divider()
     
-    # --- NEW DYNAMIC LOGIN/SIGNUP SYSTEM ---
     if not st.session_state.get("password_correct", False):
         st.header("🔐 Access Ved.ai")
         tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
         
-        # --- LOGIN TAB ---
         with tab_login:
             with st.form("login_form"):
                 log_user = st.text_input("Username").strip()
@@ -178,14 +175,12 @@ with st.sidebar:
                 
                 if log_submit:
                     hashed_pass = hash_password(log_pass)
-                    # Query Supabase to see if user/pass match exists
                     response = supabase.table("users").select("*").eq("username", log_user).eq("password", hashed_pass).execute()
                     
                     if response.data:
                         st.session_state["password_correct"] = True
                         st.session_state["current_user"] = log_user
                         
-                        # Save to admin logs
                         timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
                         with open("login_logs.csv", "a") as file:
                             file.write(f"{timestamp},{log_user}\n")
@@ -193,7 +188,6 @@ with st.sidebar:
                     else:
                         st.error("Incorrect username or password.")
                         
-        # --- SIGN UP TAB ---
         with tab_signup:
             with st.form("signup_form"):
                 new_user = st.text_input("Choose a Username").strip()
@@ -204,36 +198,28 @@ with st.sidebar:
                     if len(new_user) < 3 or len(new_pass) < 4:
                         st.error("Username must be 3+ chars, Password must be 4+ chars.")
                     else:
-                        # Check if username is already taken in the database
                         check_user = supabase.table("users").select("*").eq("username", new_user).execute()
                         if check_user.data:
                             st.warning("That username is already taken! Try another.")
                         else:
-                            # Encrypt password and save to database!
                             hashed_new_pass = hash_password(new_pass)
                             supabase.table("users").insert({"username": new_user, "password": hashed_new_pass}).execute()
                             st.success("Account created successfully! You can now log in.")
                             
-    # --- THE REST OF THE SIDEBAR (ONLY SHOWS IF LOGGED IN) ---
-   else:
+    else:
         st.success(f"Welcome back, **{st.session_state.current_user}**!")
+        
+        # --- THE FULLY ALIGNED LOGOUT & PRIVACY WIPE ---
         if st.button("🚪 Logout", width="stretch"):
-            # 1. Log the user out
             st.session_state["password_correct"] = False
             st.session_state["current_user"] = None
             
-            # 2. PRIVACY FIX: Completely wipe the AI's memory for the next user!
-            if "messages" in st.session_state: 
-                del st.session_state["messages"]
-            if "chat_session" in st.session_state: 
-                del st.session_state["chat_session"]
-            if "ai_files" in st.session_state: 
-                del st.session_state["ai_files"]
-            if "latest_generated_image" in st.session_state: 
-                del st.session_state["latest_generated_image"]
-                
-            # 3. Refresh the page to a clean slate
-            st.rerun())
+            if "messages" in st.session_state: del st.session_state["messages"]
+            if "chat_session" in st.session_state: del st.session_state["chat_session"]
+            if "ai_files" in st.session_state: del st.session_state["ai_files"]
+            if "latest_generated_image" in st.session_state: del st.session_state["latest_generated_image"]
+            
+            st.rerun()
             
         st.divider()
         st.header("📄 Upload Course Materials")
@@ -266,7 +252,6 @@ with st.sidebar:
         
         enable_voice = st.toggle("🔊 Enable AI Voice Response", value=False)
 
-        # The first person to create the account 'admin' gets access to the logs!
         if st.session_state.current_user == "admin":
             st.divider()
             if st.button("📂 View Login Logs", width="stretch"):
@@ -409,6 +394,7 @@ with tab1:
                 else:
                     message_bundle.append(user_input)
                 
+                # --- THE UPDATED 429 ERROR HANDLER ---
                 with st.spinner("Processing..."):
                     try:
                         response = st.session_state.chat_session.send_message(message_bundle, config=types.GenerateContentConfig(temperature=creativity_level))
