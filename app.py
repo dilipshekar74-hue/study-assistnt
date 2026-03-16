@@ -106,7 +106,6 @@ supabase: Client = init_connection()
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
-    # NEW: Securely tag the task with the current user's username
     current_user = st.session_state.get("current_user", "unknown")
     supabase.table("tasks").insert({"task": task_name, "date": str(due_date), "done": False, "username": current_user}).execute()
     return f"Successfully added '{task_name}' due on {due_date}."
@@ -156,7 +155,8 @@ def get_youtube_transcript(video_url: str) -> str:
 # 4. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
 # ==========================================
 with st.sidebar:
-    st.image("https://images.unsplash.com/photo-1599566219269-40b0f763cb35?q=80&w=800&auto=format&fit=crop", use_container_width=True)
+    # Updated to use width='stretch' per the new warning
+    st.image("https://images.unsplash.com/photo-1599566219269-40b0f763cb35?q=80&w=800&auto=format&fit=crop", use_column_width=True)
     st.title("🕉️ Ved.ai")
     st.divider()
     
@@ -183,7 +183,7 @@ with st.sidebar:
                 
     else:
         st.success(f"Welcome back, **{st.session_state.current_user}**!")
-        if st.button("🚪 Logout", use_container_width=True):
+        if st.button("🚪 Logout", width="stretch"):
             st.session_state["password_correct"] = False
             st.session_state["current_user"] = None
             st.rerun()
@@ -221,10 +221,11 @@ with st.sidebar:
 
         if st.session_state.current_user == "admin":
             st.divider()
-            if st.button("📂 View Login Logs", use_container_width=True):
+            if st.button("📂 View Login Logs", width="stretch"):
                 st.header("Security Logs")
                 try:
-                    st.dataframe(pd.read_csv("login_logs.csv", names=["Timestamp", "Username"]), use_container_width=True)
+                    # Updated width argument
+                    st.dataframe(pd.read_csv("login_logs.csv", names=["Timestamp", "Username"]), width="stretch")
                 except FileNotFoundError:
                     st.info("No logins recorded yet!")
 
@@ -237,9 +238,7 @@ if not st.session_state.get("password_correct", False):
     st.info("👈 Please log in using the sidebar to access Ved.ai.")
     st.stop()
 
-# Get the current logged-in user!
 current_username = st.session_state.current_user
-
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
@@ -247,7 +246,6 @@ tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
 with tab2:
     st.header("Upcoming Tasks & Assignments")
     
-    # NEW: Only fetch tasks that belong to the logged-in user!
     response = supabase.table("tasks").select("*").eq("username", current_username).execute()
     df = pd.DataFrame(response.data)
     
@@ -255,8 +253,9 @@ with tab2:
         df = pd.DataFrame(columns=["id", "task", "date", "done", "username"])
     else:
         df['done'] = df['done'].astype(bool) 
+        # --- FIX 1: Convert raw string dates from Supabase into Python datetime objects! ---
+        df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
     
-    # Hide 'id' and 'username' from the user editor interface
     edited_df = st.data_editor(
         df,
         column_config={
@@ -265,32 +264,22 @@ with tab2:
             "done": st.column_config.CheckboxColumn("Completed?", default=False), 
             "date": st.column_config.DateColumn("Due Date")
         },
-        hide_index=True, use_container_width=True, num_rows="dynamic"
+        hide_index=True, 
+        width="stretch", # --- FIX 2: Updated the deprecation warning ---
+        num_rows="dynamic"
     )
     
     if not edited_df.equals(df):
         for index, row in edited_df.iterrows():
-            # FIX: Only save to the database if the 'task' box is actually filled out!
             if pd.notna(row.get("task")) and str(row.get("task")).strip() != "":
                 if pd.notna(row.get('id')): 
-                    supabase.table("tasks").update({
-                        "task": str(row["task"]), 
-                        "date": str(row["date"]), 
-                        "done": bool(row["done"])
-                    }).eq("id", row["id"]).execute()
+                    supabase.table("tasks").update({"task": str(row["task"]), "date": str(row["date"]), "done": bool(row["done"])}).eq("id", row["id"]).execute()
                 else:
-                    supabase.table("tasks").insert({
-                        "task": str(row["task"]), 
-                        "date": str(row["date"]), 
-                        "done": bool(row["done"]), 
-                        "username": current_username
-                    }).execute()
+                    supabase.table("tasks").insert({"task": str(row["task"]), "date": str(row["date"]), "done": bool(row["done"]), "username": current_username}).execute()
         st.rerun()
 
 with tab1:
-    # NEW: Fetch only user-specific tasks to build the AI's brain
     db_response = supabase.table("tasks").select("*").eq("username", current_username).execute()
-    # Exclude ID and username from the prompt so it's clean for the AI
     clean_df = pd.DataFrame(db_response.data).drop(columns=['id', 'username'], errors='ignore') if db_response.data else pd.DataFrame()
     current_schedule_text = clean_df.to_string(index=False) if not clean_df.empty else "No tasks currently scheduled."
 
