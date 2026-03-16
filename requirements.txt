@@ -5,3 +5,4 @@ duckduckgo-search
 yfinance
 youtube-transcript-api
 pillow
+gTTS
