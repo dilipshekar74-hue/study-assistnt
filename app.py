@@ -12,6 +12,7 @@ import os
 import pandas as pd
 import datetime
 import random 
+import hashlib # <-- NEW: For encrypting user passwords!
 
 # ==========================================
 # 1. PAGE SETUP & UI THEME
@@ -91,7 +92,7 @@ def apply_indian_theme():
 apply_indian_theme()
 
 # ==========================================
-# 2. CLOUD DATABASE INIT (SUPABASE)
+# 2. CLOUD DATABASE INIT & SECURITY
 # ==========================================
 @st.cache_resource
 def init_connection():
@@ -100,6 +101,10 @@ def init_connection():
     return create_client(url, key)
 
 supabase: Client = init_connection()
+
+def hash_password(password):
+    """Encrypts the password before saving it to the database."""
+    return hashlib.sha256(password.encode()).hexdigest()
 
 # ==========================================
 # 3. AI TOOLS (FUNCTION CALLING)
@@ -152,35 +157,64 @@ def get_youtube_transcript(video_url: str) -> str:
             return f"Could not fetch transcript. Make sure the video has closed captions. Error: {e}"
 
 # ==========================================
-# 4. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
+# 4. SIDEBAR LOGO, DYNAMIC AUTH & NAVIGATION
 # ==========================================
 with st.sidebar:
-    # Updated to use width='stretch' per the new warning
     st.image("https://images.unsplash.com/photo-1599566219269-40b0f763cb35?q=80&w=800&auto=format&fit=crop", use_column_width=True)
     st.title("🕉️ Ved.ai")
     st.divider()
     
-    st.header("🔐 Account Setup")
-    
+    # --- NEW DYNAMIC LOGIN/SIGNUP SYSTEM ---
     if not st.session_state.get("password_correct", False):
-        with st.form("sidebar_login_form"):
-            username_input = st.text_input("Username").strip()
-            password_input = st.text_input("Password", type="password")
-            submit_button = st.form_submit_button("Login")
-
-        if submit_button:
-            if username_input in st.secrets["passwords"] and password_input == st.secrets["passwords"][username_input]:
-                st.session_state["password_correct"] = True
-                st.session_state["current_user"] = username_input 
+        st.header("🔐 Access Ved.ai")
+        tab_login, tab_signup = st.tabs(["Login", "Sign Up"])
+        
+        # --- LOGIN TAB ---
+        with tab_login:
+            with st.form("login_form"):
+                log_user = st.text_input("Username").strip()
+                log_pass = st.text_input("Password", type="password")
+                log_submit = st.form_submit_button("Login")
                 
-                timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
-                log_entry = f"{timestamp},{username_input}\n"
-                with open("login_logs.csv", "a") as file:
-                    file.write(log_entry)
-                st.rerun()
-            else:
-                st.error("Incorrect username or password.")
+                if log_submit:
+                    hashed_pass = hash_password(log_pass)
+                    # Query Supabase to see if user/pass match exists
+                    response = supabase.table("users").select("*").eq("username", log_user).eq("password", hashed_pass).execute()
+                    
+                    if response.data:
+                        st.session_state["password_correct"] = True
+                        st.session_state["current_user"] = log_user
+                        
+                        # Save to admin logs
+                        timestamp = datetime.datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+                        with open("login_logs.csv", "a") as file:
+                            file.write(f"{timestamp},{log_user}\n")
+                        st.rerun()
+                    else:
+                        st.error("Incorrect username or password.")
+                        
+        # --- SIGN UP TAB ---
+        with tab_signup:
+            with st.form("signup_form"):
+                new_user = st.text_input("Choose a Username").strip()
+                new_pass = st.text_input("Choose a Password", type="password")
+                sign_submit = st.form_submit_button("Create Account")
                 
+                if sign_submit:
+                    if len(new_user) < 3 or len(new_pass) < 4:
+                        st.error("Username must be 3+ chars, Password must be 4+ chars.")
+                    else:
+                        # Check if username is already taken in the database
+                        check_user = supabase.table("users").select("*").eq("username", new_user).execute()
+                        if check_user.data:
+                            st.warning("That username is already taken! Try another.")
+                        else:
+                            # Encrypt password and save to database!
+                            hashed_new_pass = hash_password(new_pass)
+                            supabase.table("users").insert({"username": new_user, "password": hashed_new_pass}).execute()
+                            st.success("Account created successfully! You can now log in.")
+                            
+    # --- THE REST OF THE SIDEBAR (ONLY SHOWS IF LOGGED IN) ---
     else:
         st.success(f"Welcome back, **{st.session_state.current_user}**!")
         if st.button("🚪 Logout", width="stretch"):
@@ -219,12 +253,12 @@ with st.sidebar:
         
         enable_voice = st.toggle("🔊 Enable AI Voice Response", value=False)
 
+        # The first person to create the account 'admin' gets access to the logs!
         if st.session_state.current_user == "admin":
             st.divider()
             if st.button("📂 View Login Logs", width="stretch"):
                 st.header("Security Logs")
                 try:
-                    # Updated width argument
                     st.dataframe(pd.read_csv("login_logs.csv", names=["Timestamp", "Username"]), width="stretch")
                 except FileNotFoundError:
                     st.info("No logins recorded yet!")
@@ -235,7 +269,7 @@ with st.sidebar:
 st.title("✨ Ved.ai")
 
 if not st.session_state.get("password_correct", False):
-    st.info("👈 Please log in using the sidebar to access Ved.ai.")
+    st.info("👈 Please log in or create an account using the sidebar to access Ved.ai.")
     st.stop()
 
 current_username = st.session_state.current_user
@@ -253,7 +287,6 @@ with tab2:
         df = pd.DataFrame(columns=["id", "task", "date", "done", "username"])
     else:
         df['done'] = df['done'].astype(bool) 
-        # --- FIX 1: Convert raw string dates from Supabase into Python datetime objects! ---
         df['date'] = pd.to_datetime(df['date'], errors='coerce').dt.date
     
     edited_df = st.data_editor(
@@ -265,7 +298,7 @@ with tab2:
             "date": st.column_config.DateColumn("Due Date")
         },
         hide_index=True, 
-        width="stretch", # --- FIX 2: Updated the deprecation warning ---
+        width="stretch", 
         num_rows="dynamic"
     )
     
