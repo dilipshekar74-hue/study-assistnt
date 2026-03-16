@@ -6,11 +6,11 @@ import yfinance as yf
 from youtube_transcript_api import YouTubeTranscriptApi
 from PIL import Image
 from gtts import gTTS
+from supabase import create_client, Client
 import tempfile
 import os
 import pandas as pd
 import datetime
-import sqlite3
 import random 
 
 # ==========================================
@@ -23,26 +23,21 @@ def apply_indian_theme():
         <style>
         @import url('https://fonts.googleapis.com/css2?family=Rozha+One&display=swap');
 
-        /* Force Sandalwood Background WITH a subtle texture */
         .stApp {
             background-color: #FDFBF7;
             background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
             background-attachment: fixed;
         }
 
-        /* --- VISIBILITY FIX --- 
-           Force all regular text, lists, and markdown to be a deep Henna brown */
         p, li, span, label, div[data-testid="stMarkdownContainer"] {
             color: #2D1A11 !important;
         }
 
-        /* Force input text boxes to have dark text and white backgrounds */
         input, textarea, [data-baseweb="input"] {
             color: #2D1A11 !important;
             background-color: #FFFFFF !important;
             -webkit-text-fill-color: #2D1A11 !important;
         }
-        /* ----------------------- */
 
         [data-testid="stSidebar"] {
             background-color: #F4EFE6 !important;
@@ -96,27 +91,24 @@ def apply_indian_theme():
 apply_indian_theme()
 
 # ==========================================
-# 2. DATABASE INIT
+# 2. CLOUD DATABASE INIT (SUPABASE)
 # ==========================================
-def init_db():
-    conn = sqlite3.connect('planner.db')
-    c = conn.cursor()
-    c.execute('''CREATE TABLE IF NOT EXISTS tasks (Task TEXT, Date TEXT, Done BOOLEAN)''')
-    conn.commit()
-    conn.close()
+@st.cache_resource
+def init_connection():
+    """Connects to your live Supabase cloud database."""
+    url = st.secrets["SUPABASE_URL"]
+    key = st.secrets["SUPABASE_KEY"]
+    return create_client(url, key)
 
-init_db()
+supabase: Client = init_connection()
 
 # ==========================================
 # 3. AI TOOLS (FUNCTION CALLING)
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
-    conn = sqlite3.connect('planner.db')
-    c = conn.cursor()
-    c.execute("INSERT INTO tasks (Task, Date, Done) VALUES (?, ?, ?)", (task_name, str(due_date), False))
-    conn.commit()
-    conn.close()
+    # Insert directly into the cloud!
+    supabase.table("tasks").insert({"task": task_name, "date": str(due_date), "done": False}).execute()
     return f"Successfully added '{task_name}' due on {due_date}."
 
 def generate_image_tool(prompt_description: str) -> str:
@@ -247,29 +239,45 @@ if not st.session_state.get("password_correct", False):
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
-tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Permanent Planner"])
+tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
 
 with tab2:
     st.header("Upcoming Tasks & Assignments")
-    conn = sqlite3.connect('planner.db')
-    df = pd.read_sql_query("SELECT * FROM tasks", conn)
-    if not df.empty:
-        df['Done'] = df['Done'].astype(bool) 
+    
+    # Fetch live data from Supabase
+    response = supabase.table("tasks").select("*").execute()
+    df = pd.DataFrame(response.data)
+    
+    if df.empty:
+        df = pd.DataFrame(columns=["id", "task", "date", "done"])
+    else:
+        df['done'] = df['done'].astype(bool) 
     
     edited_df = st.data_editor(
         df,
-        column_config={"Done": st.column_config.CheckboxColumn("Completed?", default=False), "Date": st.column_config.DateColumn("Due Date")},
+        column_config={
+            "id": None, # Hide the database ID from the user
+            "done": st.column_config.CheckboxColumn("Completed?", default=False), 
+            "date": st.column_config.DateColumn("Due Date")
+        },
         hide_index=True, use_container_width=True, num_rows="dynamic"
     )
     
+    # Sync manual edits back to the cloud
     if not edited_df.equals(df):
-        edited_df.to_sql('tasks', conn, if_exists='replace', index=False)
-    conn.close()
+        for index, row in edited_df.iterrows():
+            if pd.notna(row.get('id')): 
+                # Update existing row
+                supabase.table("tasks").update({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).eq("id", row["id"]).execute()
+            else:
+                # Insert new manually added row
+                supabase.table("tasks").insert({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).execute()
+        st.rerun()
 
 with tab1:
-    conn = sqlite3.connect('planner.db')
-    current_schedule_text = pd.read_sql_query("SELECT * FROM tasks", conn).to_string()
-    conn.close()
+    # Fetch tasks for the AI's system prompt
+    db_response = supabase.table("tasks").select("*").execute()
+    current_schedule_text = pd.DataFrame(db_response.data).to_string() if db_response.data else "No tasks currently scheduled."
 
     if "chat_session" not in st.session_state:
         st.session_state.chat_session = client.chats.create(
