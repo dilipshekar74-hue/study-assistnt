@@ -2,3 +2,5 @@ streamlit
 google-genai
 pandas
 duckduckgo-search
+yfinance
+youtube-transcript-api
