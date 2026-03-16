@@ -95,7 +95,6 @@ apply_indian_theme()
 # ==========================================
 @st.cache_resource
 def init_connection():
-    """Connects to your live Supabase cloud database."""
     url = st.secrets["SUPABASE_URL"]
     key = st.secrets["SUPABASE_KEY"]
     return create_client(url, key)
@@ -107,7 +106,9 @@ supabase: Client = init_connection()
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
-    supabase.table("tasks").insert({"task": task_name, "date": str(due_date), "done": False}).execute()
+    # NEW: Securely tag the task with the current user's username
+    current_user = st.session_state.get("current_user", "unknown")
+    supabase.table("tasks").insert({"task": task_name, "date": str(due_date), "done": False, "username": current_user}).execute()
     return f"Successfully added '{task_name}' due on {due_date}."
 
 def generate_image_tool(prompt_description: str) -> str:
@@ -236,6 +237,9 @@ if not st.session_state.get("password_correct", False):
     st.info("👈 Please log in using the sidebar to access Ved.ai.")
     st.stop()
 
+# Get the current logged-in user!
+current_username = st.session_state.current_user
+
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
@@ -243,18 +247,21 @@ tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
 with tab2:
     st.header("Upcoming Tasks & Assignments")
     
-    response = supabase.table("tasks").select("*").execute()
+    # NEW: Only fetch tasks that belong to the logged-in user!
+    response = supabase.table("tasks").select("*").eq("username", current_username).execute()
     df = pd.DataFrame(response.data)
     
     if df.empty:
-        df = pd.DataFrame(columns=["id", "task", "date", "done"])
+        df = pd.DataFrame(columns=["id", "task", "date", "done", "username"])
     else:
         df['done'] = df['done'].astype(bool) 
     
+    # Hide 'id' and 'username' from the user editor interface
     edited_df = st.data_editor(
         df,
         column_config={
             "id": None, 
+            "username": None,
             "done": st.column_config.CheckboxColumn("Completed?", default=False), 
             "date": st.column_config.DateColumn("Due Date")
         },
@@ -266,12 +273,16 @@ with tab2:
             if pd.notna(row.get('id')): 
                 supabase.table("tasks").update({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).eq("id", row["id"]).execute()
             else:
-                supabase.table("tasks").insert({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).execute()
+                # NEW: Tag manually typed rows with the username too!
+                supabase.table("tasks").insert({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"]), "username": current_username}).execute()
         st.rerun()
 
 with tab1:
-    db_response = supabase.table("tasks").select("*").execute()
-    current_schedule_text = pd.DataFrame(db_response.data).to_string() if db_response.data else "No tasks currently scheduled."
+    # NEW: Fetch only user-specific tasks to build the AI's brain
+    db_response = supabase.table("tasks").select("*").eq("username", current_username).execute()
+    # Exclude ID and username from the prompt so it's clean for the AI
+    clean_df = pd.DataFrame(db_response.data).drop(columns=['id', 'username'], errors='ignore') if db_response.data else pd.DataFrame()
+    current_schedule_text = clean_df.to_string(index=False) if not clean_df.empty else "No tasks currently scheduled."
 
     if "chat_session" not in st.session_state:
         st.session_state.chat_session = client.chats.create(
@@ -321,7 +332,6 @@ with tab1:
         "E.g., Add 'Review Asymptotic Notation' to my planner..."
     ]
     
-    # --- ENTER KEY FIX ---
     if "current_placeholder" not in st.session_state:
         st.session_state.current_placeholder = random.choice(prompt_ideas)
     
@@ -396,6 +406,5 @@ with tab1:
             
             if is_audio: os.remove(temp_audio_path)
             
-            # --- ENTER KEY FIX: Shuffle the prompt only after a message is sent ---
             st.session_state.current_placeholder = random.choice(prompt_ideas)
             st.rerun()
