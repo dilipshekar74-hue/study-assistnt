@@ -413,8 +413,11 @@ with tab1:
                     try:
                         response = st.session_state.chat_session.send_message(message_bundle, config=types.GenerateContentConfig(temperature=creativity_level))
                     except Exception as e:
-                        st.error("🚨 Error!")
-                        st.json(getattr(e, 'response_json', str(e)))
+                        error_msg = str(e)
+                        if "429" in error_msg or "RESOURCE_EXHAUSTED" in error_msg:
+                            st.error("⏳ **API Speed Limit Reached!** Ved.ai is thinking too fast. Please wait about 60 seconds and try again.")
+                        else:
+                            st.error(f"🚨 Oops! Something went wrong: {error_msg}")
                         st.stop()
                 
                 st.markdown(response.text)
