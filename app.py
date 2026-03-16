@@ -14,7 +14,8 @@ import sqlite3
 # ==========================================
 # 1. PAGE SETUP & DATABASE INIT
 # ==========================================
-st.set_page_config(page_title="Unit Study Assistant", page_icon="🎓", layout="centered")
+# REBRAND: Updated page title and icon!
+st.set_page_config(page_title="Ved.ai", page_icon="🕉️", layout="centered")
 
 def init_db():
     conn = sqlite3.connect('planner.db')
@@ -79,9 +80,15 @@ def get_youtube_transcript(video_url: str) -> str:
             return f"Could not fetch transcript. Make sure the video has closed captions. Error: {e}"
 
 # ==========================================
-# 3. SIDEBAR AUTHENTICATION & NAVIGATION
+# 3. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
 # ==========================================
 with st.sidebar:
+    # --- BRANDING LOGO AREA ---
+    # To use a custom image later, uncomment the line below and add your file!
+    # st.image("my_custom_logo.png", use_container_width=True)
+    st.title("🕉️ Ved.ai")
+    st.divider()
+    
     st.header("🔐 Account Setup")
     
     if not st.session_state.get("password_correct", False):
@@ -150,10 +157,11 @@ with st.sidebar:
 # ==========================================
 # 4. THE MAIN APPLICATION (GATED)
 # ==========================================
-st.title("🎓 Unit Study Assistant (Pro)")
+# REBRAND: Updated main title
+st.title("✨ Ved.ai")
 
 if not st.session_state.get("password_correct", False):
-    st.info("👈 Please log in using the sidebar to access your study assistant.")
+    st.info("👈 Please log in using the sidebar to access Ved.ai.")
     st.stop()
 
 client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
@@ -188,8 +196,9 @@ with tab1:
         st.session_state.chat_session = client.chats.create(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
+                # REBRAND: Told the AI its new identity!
                 system_instruction=f"""
-                    You are a highly advanced college study assistant and personal dashboard.
+                    You are Ved.ai, a highly advanced college study assistant and personal dashboard.
                     Here is the user's current schedule:\n{current_schedule_text}
                     
                     CRITICAL OVERRIDES & TOOLS:
@@ -214,9 +223,9 @@ with tab1:
                 if msg.get("is_image"): st.image(msg["content"], width=300)
                 else: st.markdown(msg["content"])
 
-    # --- THE NEW CAMERA WIDGET ---
+    # --- THE CAMERA WIDGET ---
     with st.expander("📸 Take a Picture (Notes, Whiteboards, Math Problems)"):
-        camera_photo = st.camera_input("Snap a photo to send to the AI")
+        camera_photo = st.camera_input("Snap a photo to send to Ved.ai")
 
     audio_value = st.audio_input("Record a voice command")
     user_text_input = st.chat_input("E.g., Solve the math problem in the photo...")
@@ -229,7 +238,6 @@ with tab1:
                 message_bundle = st.session_state.ai_files.copy()
                 st.session_state.ai_files = [] 
                 
-                # Check if a camera photo was taken!
                 if camera_photo:
                     img = Image.open(camera_photo)
                     st.image(img, caption="Camera Upload", width=300)
