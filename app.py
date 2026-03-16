@@ -107,7 +107,6 @@ supabase: Client = init_connection()
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
-    # Insert directly into the cloud!
     supabase.table("tasks").insert({"task": task_name, "date": str(due_date), "done": False}).execute()
     return f"Successfully added '{task_name}' due on {due_date}."
 
@@ -244,7 +243,6 @@ tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Cloud Planner"])
 with tab2:
     st.header("Upcoming Tasks & Assignments")
     
-    # Fetch live data from Supabase
     response = supabase.table("tasks").select("*").execute()
     df = pd.DataFrame(response.data)
     
@@ -256,26 +254,22 @@ with tab2:
     edited_df = st.data_editor(
         df,
         column_config={
-            "id": None, # Hide the database ID from the user
+            "id": None, 
             "done": st.column_config.CheckboxColumn("Completed?", default=False), 
             "date": st.column_config.DateColumn("Due Date")
         },
         hide_index=True, use_container_width=True, num_rows="dynamic"
     )
     
-    # Sync manual edits back to the cloud
     if not edited_df.equals(df):
         for index, row in edited_df.iterrows():
             if pd.notna(row.get('id')): 
-                # Update existing row
                 supabase.table("tasks").update({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).eq("id", row["id"]).execute()
             else:
-                # Insert new manually added row
                 supabase.table("tasks").insert({"task": row["task"], "date": str(row["date"]), "done": bool(row["done"])}).execute()
         st.rerun()
 
 with tab1:
-    # Fetch tasks for the AI's system prompt
     db_response = supabase.table("tasks").select("*").execute()
     current_schedule_text = pd.DataFrame(db_response.data).to_string() if db_response.data else "No tasks currently scheduled."
 
@@ -326,9 +320,12 @@ with tab1:
         "E.g., Create 5 flashcards from my PDF notes...",
         "E.g., Add 'Review Asymptotic Notation' to my planner..."
     ]
-    random_prompt = random.choice(prompt_ideas)
     
-    user_text_input = st.chat_input(random_prompt)
+    # --- ENTER KEY FIX ---
+    if "current_placeholder" not in st.session_state:
+        st.session_state.current_placeholder = random.choice(prompt_ideas)
+    
+    user_text_input = st.chat_input(st.session_state.current_placeholder)
     user_input = audio_value if audio_value else user_text_input
     is_audio = bool(audio_value)
         
@@ -398,3 +395,7 @@ with tab1:
                     del st.session_state.latest_generated_image
             
             if is_audio: os.remove(temp_audio_path)
+            
+            # --- ENTER KEY FIX: Shuffle the prompt only after a message is sent ---
+            st.session_state.current_placeholder = random.choice(prompt_ideas)
+            st.rerun()
