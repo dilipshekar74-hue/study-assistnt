@@ -12,11 +12,82 @@ import datetime
 import sqlite3
 
 # ==========================================
-# 1. PAGE SETUP & DATABASE INIT
+# 1. PAGE SETUP & UI THEME
 # ==========================================
-# REBRAND: Updated page title and icon!
 st.set_page_config(page_title="Ved.ai", page_icon="🕉️", layout="centered")
 
+def apply_indian_theme():
+    """Injects custom CSS for a Royal Indian/Vedic aesthetic."""
+    st.markdown("""
+        <style>
+        /* Import an elegant, classical Google Font for headers */
+        @import url('https://fonts.googleapis.com/css2?family=Rozha+One&display=swap');
+
+        /* Force Sandalwood/Parchment Background */
+        .stApp {
+            background-color: #FDFBF7;
+        }
+
+        /* Sidebar Styling */
+        [data-testid="stSidebar"] {
+            background-color: #F4EFE6 !important;
+            border-right: 2px solid #E37D00;
+        }
+
+        /* Apply the classical font to all headers */
+        h1, h2, h3 {
+            font-family: 'Rozha One', serif !important;
+            color: #8B0000 !important; /* Deep Crimson/Kumkum */
+        }
+
+        /* Style the main title specially */
+        .stApp h1:first-child {
+            text-align: center;
+            border-bottom: 2px solid #D4AF37; /* Gold accent line */
+            padding-bottom: 10px;
+            margin-bottom: 30px;
+        }
+
+        /* Style the AI's chat bubbles to look like ancient scrolls */
+        [data-testid="stChatMessage"]:nth-child(even) {
+            background-color: #FEF9F0;
+            border-left: 4px solid #E37D00; /* Saffron border */
+            border-radius: 5px;
+            padding: 15px;
+            box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
+        }
+
+        /* Style the User's chat bubbles */
+        [data-testid="stChatMessage"]:nth-child(odd) {
+            background-color: #FFFFFF;
+            border-right: 4px solid #D4AF37; /* Gold border */
+            border-radius: 5px;
+            padding: 15px;
+        }
+
+        /* Make buttons look royal */
+        .stButton>button {
+            border-radius: 20px;
+            border: 1px solid #E37D00;
+            background-color: #FEF9F0;
+            color: #8B0000;
+            transition: all 0.3s ease;
+        }
+        .stButton>button:hover {
+            box-shadow: 0px 4px 10px rgba(227, 125, 0, 0.4);
+            transform: translateY(-2px);
+            border: 1px solid #8B0000;
+            color: #E37D00;
+        }
+        </style>
+    """, unsafe_allow_html=True)
+
+# Instantly apply the aesthetic
+apply_indian_theme()
+
+# ==========================================
+# 2. DATABASE INIT
+# ==========================================
 def init_db():
     conn = sqlite3.connect('planner.db')
     c = conn.cursor()
@@ -27,7 +98,7 @@ def init_db():
 init_db()
 
 # ==========================================
-# 2. AI TOOLS (FUNCTION CALLING)
+# 3. AI TOOLS (FUNCTION CALLING)
 # ==========================================
 def add_task(task_name: str, days_from_now: int) -> str:
     due_date = datetime.date.today() + datetime.timedelta(days=days_from_now)
@@ -80,12 +151,9 @@ def get_youtube_transcript(video_url: str) -> str:
             return f"Could not fetch transcript. Make sure the video has closed captions. Error: {e}"
 
 # ==========================================
-# 3. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
+# 4. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
 # ==========================================
 with st.sidebar:
-    # --- BRANDING LOGO AREA ---
-    # To use a custom image later, uncomment the line below and add your file!
-    # st.image("my_custom_logo.png", use_container_width=True)
     st.title("🕉️ Ved.ai")
     st.divider()
     
@@ -155,9 +223,8 @@ with st.sidebar:
                     st.info("No logins recorded yet!")
 
 # ==========================================
-# 4. THE MAIN APPLICATION (GATED)
+# 5. THE MAIN APPLICATION (GATED)
 # ==========================================
-# REBRAND: Updated main title
 st.title("✨ Ved.ai")
 
 if not st.session_state.get("password_correct", False):
@@ -196,7 +263,6 @@ with tab1:
         st.session_state.chat_session = client.chats.create(
             model="gemini-2.5-flash",
             config=types.GenerateContentConfig(
-                # REBRAND: Told the AI its new identity!
                 system_instruction=f"""
                     You are Ved.ai, a highly advanced college study assistant and personal dashboard.
                     Here is the user's current schedule:\n{current_schedule_text}
@@ -219,11 +285,10 @@ with tab1:
 
     with chat_container:
         for msg in st.session_state.messages:
-            with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🦉"):
+            with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🕉️"):
                 if msg.get("is_image"): st.image(msg["content"], width=300)
                 else: st.markdown(msg["content"])
 
-    # --- THE CAMERA WIDGET ---
     with st.expander("📸 Take a Picture (Notes, Whiteboards, Math Problems)"):
         camera_photo = st.camera_input("Snap a photo to send to Ved.ai")
 
@@ -247,7 +312,7 @@ with tab1:
                 st.markdown("🎤 *Sent an audio message*" if is_audio else user_input)
                 st.session_state.messages.append({"role": "user", "content": "🎤 *Sent an audio message*" if is_audio else user_input, "is_image": False})
             
-            with st.chat_message("assistant", avatar="🦉"):
+            with st.chat_message("assistant", avatar="🕉️"):
                 if is_audio:
                     with st.spinner("Listening..."):
                         with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as temp_audio:
