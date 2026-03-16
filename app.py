@@ -5,12 +5,13 @@ from duckduckgo_search import DDGS
 import yfinance as yf
 from youtube_transcript_api import YouTubeTranscriptApi
 from PIL import Image
+from gtts import gTTS
 import tempfile
 import os
 import pandas as pd
 import datetime
 import sqlite3
-import random  # <-- Added for the randomized chat prompts!
+import random 
 
 # ==========================================
 # 1. PAGE SETUP & UI THEME
@@ -18,58 +19,49 @@ import random  # <-- Added for the randomized chat prompts!
 st.set_page_config(page_title="Ved.ai", page_icon="🕉️", layout="centered")
 
 def apply_indian_theme():
-    """Injects custom CSS for a Royal Indian/Vedic aesthetic with a textured background."""
     st.markdown("""
         <style>
-        /* Import an elegant, classical Google Font for headers */
         @import url('https://fonts.googleapis.com/css2?family=Rozha+One&display=swap');
 
-        /* Force Sandalwood Background WITH a subtle geometric/mandala texture */
         .stApp {
             background-color: #FDFBF7;
             background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
             background-attachment: fixed;
         }
 
-        /* Sidebar Styling - Slightly darker parchment with the same texture */
         [data-testid="stSidebar"] {
             background-color: #F4EFE6 !important;
             background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
             border-right: 2px solid #E37D00;
         }
 
-        /* Apply the classical font to all headers */
         h1, h2, h3 {
             font-family: 'Rozha One', serif !important;
-            color: #8B0000 !important; /* Deep Crimson/Kumkum */
+            color: #8B0000 !important; 
         }
 
-        /* Style the main title specially */
         .stApp h1:first-child {
             text-align: center;
-            border-bottom: 2px solid #D4AF37; /* Gold accent line */
+            border-bottom: 2px solid #D4AF37; 
             padding-bottom: 10px;
             margin-bottom: 30px;
         }
 
-        /* Style the AI's chat bubbles to look like ancient scrolls */
         [data-testid="stChatMessage"]:nth-child(even) {
-            background-color: rgba(254, 249, 240, 0.95); /* Slightly transparent so texture peeks through */
-            border-left: 4px solid #E37D00; /* Saffron border */
+            background-color: rgba(254, 249, 240, 0.95); 
+            border-left: 4px solid #E37D00; 
             border-radius: 5px;
             padding: 15px;
             box-shadow: 2px 2px 5px rgba(0,0,0,0.05);
         }
 
-        /* Style the User's chat bubbles */
         [data-testid="stChatMessage"]:nth-child(odd) {
             background-color: rgba(255, 255, 255, 0.95);
-            border-right: 4px solid #D4AF37; /* Gold border */
+            border-right: 4px solid #D4AF37; 
             border-radius: 5px;
             padding: 15px;
         }
 
-        /* Make buttons look royal */
         .stButton>button {
             border-radius: 20px;
             border: 1px solid #E37D00;
@@ -86,7 +78,6 @@ def apply_indian_theme():
         </style>
     """, unsafe_allow_html=True)
 
-# Instantly apply the aesthetic
 apply_indian_theme()
 
 # ==========================================
@@ -158,7 +149,6 @@ def get_youtube_transcript(video_url: str) -> str:
 # 4. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
 # ==========================================
 with st.sidebar:
-    # --- VISUAL BRANDING HEADER ---
     st.image("https://images.unsplash.com/photo-1599566219269-40b0f763cb35?q=80&w=800&auto=format&fit=crop", use_container_width=True)
     st.title("🕉️ Ved.ai")
     st.divider()
@@ -217,7 +207,11 @@ with st.sidebar:
             st.rerun()
             
         st.divider()
-        creativity_level = st.slider("Creativity Level (Temperature)", 0.0, 1.0, 0.3, 0.1)
+        st.header("🎛️ AI Settings")
+        creativity_level = st.slider("Creativity Level", 0.0, 1.0, 0.3, 0.1)
+        
+        # --- NEW VOICE TOGGLE ---
+        enable_voice = st.toggle("🔊 Enable AI Voice Response", value=False)
 
         if st.session_state.current_user == "admin":
             st.divider()
@@ -241,7 +235,6 @@ client = genai.Client(api_key=st.secrets["GEMINI_API_KEY"])
 
 tab1, tab2 = st.tabs(["💬 Chat & Tools", "📅 Permanent Planner"])
 
-# --- TAB 2: SQLITE SCHEDULER ---
 with tab2:
     st.header("Upcoming Tasks & Assignments")
     conn = sqlite3.connect('planner.db')
@@ -259,7 +252,6 @@ with tab2:
         edited_df.to_sql('tasks', conn, if_exists='replace', index=False)
     conn.close()
 
-# --- TAB 1: CHAT INTERFACE ---
 with tab1:
     conn = sqlite3.connect('planner.db')
     current_schedule_text = pd.read_sql_query("SELECT * FROM tasks", conn).to_string()
@@ -294,13 +286,16 @@ with tab1:
             with st.chat_message(msg["role"], avatar="🧑‍💻" if msg["role"] == "user" else "🕉️"):
                 if msg.get("is_image"): st.image(msg["content"], width=300)
                 else: st.markdown(msg["content"])
+                
+                # Render previous audio files if they exist in history
+                if msg.get("audio_file"):
+                    st.audio(msg["audio_file"], format="audio/mp3")
 
     with st.expander("📸 Take a Picture (Notes, Whiteboards, Math Problems)"):
         camera_photo = st.camera_input("Snap a photo to send to Ved.ai")
 
     audio_value = st.audio_input("Record a voice command")
     
-    # --- RANDOMIZED PROMPT LIST ---
     prompt_ideas = [
         "E.g., Summarize this YouTube link...",
         "E.g., Check the Nifty 50 performance today...",
@@ -350,7 +345,26 @@ with tab1:
                         st.stop()
                 
                 st.markdown(response.text)
-                st.session_state.messages.append({"role": "assistant", "content": response.text, "is_image": False})
+                
+                # --- NEW: TEXT-TO-SPEECH LOGIC ---
+                audio_path_to_save = None
+                if enable_voice:
+                    with st.spinner("Generating voice..."):
+                        # 'tld=co.in' gives the voice an Indian accent!
+                        tts = gTTS(text=response.text.replace('*', ''), lang='en', tld='co.in')
+                        temp_tts_file = tempfile.NamedTemporaryFile(delete=False, suffix=".mp3")
+                        tts.save(temp_tts_file.name)
+                        audio_path_to_save = temp_tts_file.name
+                        # Autoplay the audio immediately
+                        st.audio(temp_tts_file.name, format="audio/mp3", autoplay=True)
+                
+                # Save the message and the audio file to history
+                st.session_state.messages.append({
+                    "role": "assistant", 
+                    "content": response.text, 
+                    "is_image": False,
+                    "audio_file": audio_path_to_save
+                })
                 
                 is_csv = "," in response.text and "Term" in response.text
                 st.download_button(
