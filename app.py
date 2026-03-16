@@ -10,6 +10,7 @@ import os
 import pandas as pd
 import datetime
 import sqlite3
+import random  # <-- Added for the randomized chat prompts!
 
 # ==========================================
 # 1. PAGE SETUP & UI THEME
@@ -17,20 +18,23 @@ import sqlite3
 st.set_page_config(page_title="Ved.ai", page_icon="🕉️", layout="centered")
 
 def apply_indian_theme():
-    """Injects custom CSS for a Royal Indian/Vedic aesthetic."""
+    """Injects custom CSS for a Royal Indian/Vedic aesthetic with a textured background."""
     st.markdown("""
         <style>
         /* Import an elegant, classical Google Font for headers */
         @import url('https://fonts.googleapis.com/css2?family=Rozha+One&display=swap');
 
-        /* Force Sandalwood/Parchment Background */
+        /* Force Sandalwood Background WITH a subtle geometric/mandala texture */
         .stApp {
             background-color: #FDFBF7;
+            background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
+            background-attachment: fixed;
         }
 
-        /* Sidebar Styling */
+        /* Sidebar Styling - Slightly darker parchment with the same texture */
         [data-testid="stSidebar"] {
             background-color: #F4EFE6 !important;
+            background-image: url("https://www.transparenttextures.com/patterns/arabesque.png");
             border-right: 2px solid #E37D00;
         }
 
@@ -50,7 +54,7 @@ def apply_indian_theme():
 
         /* Style the AI's chat bubbles to look like ancient scrolls */
         [data-testid="stChatMessage"]:nth-child(even) {
-            background-color: #FEF9F0;
+            background-color: rgba(254, 249, 240, 0.95); /* Slightly transparent so texture peeks through */
             border-left: 4px solid #E37D00; /* Saffron border */
             border-radius: 5px;
             padding: 15px;
@@ -59,7 +63,7 @@ def apply_indian_theme():
 
         /* Style the User's chat bubbles */
         [data-testid="stChatMessage"]:nth-child(odd) {
-            background-color: #FFFFFF;
+            background-color: rgba(255, 255, 255, 0.95);
             border-right: 4px solid #D4AF37; /* Gold border */
             border-radius: 5px;
             padding: 15px;
@@ -154,6 +158,8 @@ def get_youtube_transcript(video_url: str) -> str:
 # 4. SIDEBAR LOGO, AUTHENTICATION & NAVIGATION
 # ==========================================
 with st.sidebar:
+    # --- VISUAL BRANDING HEADER ---
+    st.image("https://images.unsplash.com/photo-1599566219269-40b0f763cb35?q=80&w=800&auto=format&fit=crop", use_container_width=True)
     st.title("🕉️ Ved.ai")
     st.divider()
     
@@ -293,7 +299,20 @@ with tab1:
         camera_photo = st.camera_input("Snap a photo to send to Ved.ai")
 
     audio_value = st.audio_input("Record a voice command")
-    user_text_input = st.chat_input("E.g., Solve the math problem in the photo...")
+    
+    # --- RANDOMIZED PROMPT LIST ---
+    prompt_ideas = [
+        "E.g., Summarize this YouTube link...",
+        "E.g., Check the Nifty 50 performance today...",
+        "E.g., Search the web for recent AI news...",
+        "E.g., Solve the math problem in the photo...",
+        "E.g., Draw a diagram of a CPU architecture...",
+        "E.g., Create 5 flashcards from my PDF notes...",
+        "E.g., Add 'Review Asymptotic Notation' to my planner..."
+    ]
+    random_prompt = random.choice(prompt_ideas)
+    
+    user_text_input = st.chat_input(random_prompt)
     user_input = audio_value if audio_value else user_text_input
     is_audio = bool(audio_value)
         
