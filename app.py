@@ -215,12 +215,25 @@ with st.sidebar:
                             st.success("Account created successfully! You can now log in.")
                             
     # --- THE REST OF THE SIDEBAR (ONLY SHOWS IF LOGGED IN) ---
-    else:
+   else:
         st.success(f"Welcome back, **{st.session_state.current_user}**!")
         if st.button("🚪 Logout", width="stretch"):
+            # 1. Log the user out
             st.session_state["password_correct"] = False
             st.session_state["current_user"] = None
-            st.rerun()
+            
+            # 2. PRIVACY FIX: Completely wipe the AI's memory for the next user!
+            if "messages" in st.session_state: 
+                del st.session_state["messages"]
+            if "chat_session" in st.session_state: 
+                del st.session_state["chat_session"]
+            if "ai_files" in st.session_state: 
+                del st.session_state["ai_files"]
+            if "latest_generated_image" in st.session_state: 
+                del st.session_state["latest_generated_image"]
+                
+            # 3. Refresh the page to a clean slate
+            st.rerun())
             
         st.divider()
         st.header("📄 Upload Course Materials")
