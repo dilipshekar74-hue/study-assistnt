@@ -19,7 +19,7 @@ import {
   FileCheck
 } from 'lucide-react';
 
-export const PLATFORM_TOUR_STEPS = [
+const PLATFORM_TOUR_STEPS = [
   {
     step: 1,
     title: 'Dual-Pane Learning Core (40% / 60%)',
