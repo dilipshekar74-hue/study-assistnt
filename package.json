@@ -1,0 +1,46 @@
+{
+  "name": "study-assistnt",
+  "version": "1.0.0",
+  "description": "An intelligent, full-stack college study assistant built with Python and Streamlit.",
+  "type": "module",
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/dilipshekar74-hue/study-assistnt.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "bugs": {
+    "url": "https://github.com/dilipshekar74-hue/study-assistnt/issues"
+  },
+  "homepage": "https://github.com/dilipshekar74-hue/study-assistnt#readme",
+  "dependencies": {
+    "@prisma/client": "^6.19.3",
+    "@supabase/ssr": "^0.12.7",
+    "@supabase/supabase-js": "^2.117.2",
+    "bcryptjs": "^3.0.3",
+    "framer-motion": "^13.5.1",
+    "katex": "^0.18.10",
+    "lucide-react": "^1.59.0",
+    "react": "^19.3.0",
+    "react-dom": "^19.3.0",
+    "react-markdown": "^10.1.0",
+    "rehype-katex": "^7.0.1",
+    "remark-math": "^6.0.0",
+    "zustand": "^5.0.15"
+  },
+  "devDependencies": {
+    "@tailwindcss/typography": "^0.5.20",
+    "@vitejs/plugin-react": "^6.1.1",
+    "autoprefixer": "^10.6.1",
+    "postcss": "^8.5.28",
+    "prisma": "^6.19.3",
+    "tailwindcss": "^3.4.19",
+    "vite": "^8.3.1"
+  }
+}

@@ -1,0 +1,83 @@
+// Prisma schema for ved.ai PostgreSQL database
+// Follows .agents/rules/auth-database.md standards
+
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum Role {
+  STUDENT
+  INSTRUCTOR
+  ADMIN
+}
+
+model User {
+  id           String          @id @default(uuid())
+  email        String          @unique
+  passwordHash String
+  role         Role            @default(STUDENT)
+  createdAt    DateTime        @default(now())
+  updatedAt    DateTime        @updatedAt
+
+  // Tenant Isolation Relationships
+  sessions       Session[]
+  studentProfile StudentProfile?
+  artifacts      Artifact[]
+
+  @@map("users")
+}
+
+model Session {
+  id           String   @id @default(uuid())
+  sessionToken String   @unique
+  userId       String
+  expiresAt    DateTime
+  ipAddress    String?
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([sessionToken])
+  @@map("sessions")
+}
+
+model StudentProfile {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  academicLevel     String   @default("Undergraduate") // Freshman, Undergraduate, Graduate
+  major             String?  // e.g., "Physics / Mechanical Engineering"
+  socraticFriction  Float    @default(0.7) // Pedagogical friction level (0.0 to 1.0)
+  totalStudyMinutes Int      @default(0)   // Atomic updates
+  streakDays        Int      @default(0)   // Atomic updates
+  lastActiveAt      DateTime @default(now())
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@map("student_profiles")
+}
+
+model Artifact {
+  id        String   @id @default(uuid())
+  userId    String
+  type      String   // "math" | "code" | "notes"
+  title     String
+  content   String   @db.Text
+  language  String   @default("latex")
+  metadata  Json?    // Structured JSONB: step latency, tool query strings, status, pedagogical notes
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@map("artifacts")
+}
