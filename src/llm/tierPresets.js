@@ -49,11 +49,11 @@ export const ACADEMIC_TIERS = [
   },
   {
     id: 'admin_gate_da',
-    name: '⚡ GATE DA Admin Command',
-    shortName: 'GATE DA Admin',
-    badge: 'ADMIN • IIT GATE DA Exam Engine',
+    name: '🎯 IIT GATE DA Exam Mastery',
+    shortName: 'GATE DA Mastery',
+    badge: 'IIT GATE DA Exam Engine',
     color: 'rose',
-    isAdminOnly: true,
+    isAdminOnly: false,
     description: 'Official IIT GATE Data Science & AI Engine: <60s shortcuts, distractor traps, live scoring.',
   }
 ];

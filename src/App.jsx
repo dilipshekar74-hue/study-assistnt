@@ -47,7 +47,13 @@ import {
 import KatexMath from './components/KatexMath';
 import PlatformTourModal from './components/PlatformTourModal';
 import RegularLlmWorkspace from './components/RegularLlmWorkspace';
+import VedCompanionChatbot from './components/VedCompanionChatbot';
 import { supabase } from './lib/supabaseClient';
+import {
+  saveUserToDatabase,
+  getOrCreateStudentProgress,
+  recordAssignmentToProgress
+} from './services/vedSubLlmEngine';
 
 // Custom YouTube Icon (lucide-react does not bundle brand icons)
 function Youtube({ className = 'h-5 w-5', ...props }) {
@@ -211,7 +217,7 @@ const ACADEMIC_TIERS = [
   { id: 'tier_high', label: 'Grades 9–12', badge: 'High School STEM' },
   { id: 'tier_undergrad', label: 'Undergrad (B.E./B.Tech)', badge: 'University CS/STEM' },
   { id: 'tier_masters', label: 'Master’s / Research', badge: 'Postgraduate' },
-  { id: 'admin_gate_da', label: '⚡ Admin: GATE DA', badge: 'IIT GATE DA Mode', isAdmin: true }
+  { id: 'admin_gate_da', label: 'IIT GATE DA Mastery', badge: 'GATE DA Preparation' }
 ];
 
 const SLIDE_DECK_TABS = [
@@ -614,11 +620,11 @@ export default function VedWorkbench() {
       return null;
     }
   });
-  const [loginRole, setLoginRole] = useState('admin_gate_da');
-  const [fullName, setFullName] = useState('Dilip Shekar Kigga');
-  const [email, setEmail] = useState('dilip@ved.ai');
+  const [loginRole, setLoginRole] = useState('student');
+  const [fullName, setFullName] = useState('');
+  const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
-  const [selectedTier, setSelectedTier] = useState('admin_gate_da');
+  const [selectedTier, setSelectedTier] = useState('tier_undergrad');
 
   // --- Workspace Mode (Regular Socratic LLM vs Chapter Curriculum) & Tour ---
   const [workspaceMode, setWorkspaceMode] = useState(() => {
@@ -766,9 +772,9 @@ export default function VedWorkbench() {
       const newSession = {
         userId: `VED-${provider.toUpperCase()}-${Math.floor(1000 + Math.random() * 9000)}`,
         fullName: isGoogle ? 'Google Scholar' : 'GitHub Developer',
-        email: isGoogle ? 'google.scholar@ved.ai' : 'developer@github.com',
+        email: isGoogle ? 'scholar@google.com' : 'developer@github.com',
         role: 'student',
-        academicTier: selectedTier === 'admin_gate_da' ? 'admin_gate_da' : 'tier_undergrad',
+        academicTier: selectedTier || 'tier_undergrad',
         startingMode: authStartingMode || 'regular_llm',
         streakDays: 7,
         provider
@@ -776,6 +782,11 @@ export default function VedWorkbench() {
       setSession(newSession);
       localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
       setWorkspaceMode(newSession.startingMode);
+
+      // Persist to database & Day 1 progress tracker
+      await saveUserToDatabase(newSession);
+      getOrCreateStudentProgress(newSession);
+
       recordBackendEvent('AUTH_SOCIAL_LOGIN', { provider, role: newSession.role });
     } finally {
       setAuthLoading(false);
@@ -783,24 +794,30 @@ export default function VedWorkbench() {
   };
 
   // Handle Traditional Sign In
-  const handleSignIn = (e) => {
+  const handleSignIn = async (e) => {
     e.preventDefault();
     if (!email.trim() || !password.trim()) return;
     setAuthLoading(true);
     setAuthError('');
     try {
+      const displayName = fullName.trim() || email.split('@')[0];
       const newSession = {
         userId: `VED-${Math.floor(1000 + Math.random() * 9000)}`,
-        fullName: fullName.trim() || email.split('@')[0],
-        email: email.trim(),
-        role: loginRole,
-        academicTier: loginRole === 'admin_gate_da' ? 'admin_gate_da' : selectedTier,
+        fullName: displayName,
+        email: email.trim().toLowerCase(),
+        role: 'student',
+        academicTier: selectedTier || 'tier_undergrad',
         startingMode: authStartingMode || 'regular_llm',
         streakDays: 7
       };
       setSession(newSession);
       localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
       setWorkspaceMode(newSession.startingMode);
+
+      // Persist to database & Day 1 progress tracker
+      await saveUserToDatabase(newSession);
+      getOrCreateStudentProgress(newSession);
+
       recordBackendEvent('AUTH_LOGIN', { role: newSession.role, tier: newSession.academicTier });
     } catch (err) {
       setAuthError(err.message || 'Login failed.');
@@ -809,8 +826,8 @@ export default function VedWorkbench() {
     }
   };
 
-  // Handle New User Sign Up (Registration)
-  const handleSignUp = (e) => {
+  // Handle New User Sign Up (Registration) - Saves directly to Database
+  const handleSignUp = async (e) => {
     e.preventDefault();
     if (!fullName.trim() || !email.trim() || !password.trim()) return;
     setAuthLoading(true);
@@ -819,15 +836,20 @@ export default function VedWorkbench() {
       const newSession = {
         userId: `VED-NEW-${Math.floor(1000 + Math.random() * 9000)}`,
         fullName: fullName.trim(),
-        email: email.trim(),
-        role: selectedTier === 'admin_gate_da' ? 'admin_gate_da' : 'student',
-        academicTier: selectedTier,
+        email: email.trim().toLowerCase(),
+        role: 'student',
+        academicTier: selectedTier || 'tier_undergrad',
         startingMode: authStartingMode || 'regular_llm',
         streakDays: 1
       };
       setSession(newSession);
       localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
       setWorkspaceMode(newSession.startingMode);
+
+      // Persist new user directly to Supabase and local persistent user table
+      await saveUserToDatabase(newSession);
+      getOrCreateStudentProgress(newSession);
+
       recordBackendEvent('AUTH_SIGNUP', { role: newSession.role, tier: newSession.academicTier });
       // Launch guided tour for brand new signups
       setShowTourModal(true);
@@ -839,7 +861,7 @@ export default function VedWorkbench() {
   };
 
   // Instant Guest Sandbox Access
-  const handleGuestDemo = (startingMode = 'regular_llm') => {
+  const handleGuestDemo = async (startingMode = 'regular_llm') => {
     const guestSession = {
       userId: 'VED-GUEST-7777',
       fullName: 'Astra Guest Scholar',
@@ -853,6 +875,8 @@ export default function VedWorkbench() {
     setSession(guestSession);
     localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(guestSession));
     setWorkspaceMode(startingMode);
+    await saveUserToDatabase(guestSession);
+    getOrCreateStudentProgress(guestSession);
     recordBackendEvent('AUTH_GUEST_DEMO', { mode: startingMode });
   };
 
@@ -962,6 +986,10 @@ export default function VedWorkbench() {
       const updatedSubs = [evaluation, ...submissions];
       setSubmissions(updatedSubs);
       localStorage.setItem(STORAGE_KEYS.ASSIGNMENTS, JSON.stringify(updatedSubs));
+      if (session) {
+        const studentProgress = getOrCreateStudentProgress(session);
+        recordAssignmentToProgress(studentProgress, evaluation);
+      }
       recordBackendEvent('ASSIGNMENT_GRADED', {
         score,
         chapter: activeChapter.chapterNumber
@@ -1085,37 +1113,6 @@ export default function VedWorkbench() {
           {/* SIGN IN FORM */}
           {authTab === 'signin' ? (
             <form onSubmit={handleSignIn} className="space-y-3.5">
-              <div className="grid grid-cols-2 gap-2 rounded-xl border border-white/[0.08] bg-zinc-950/70 p-1">
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginRole('student');
-                    setSelectedTier('tier_undergrad');
-                  }}
-                  className={`rounded-lg py-1.5 text-xs font-medium transition-all ${
-                    loginRole === 'student'
-                      ? 'bg-indigo-600 text-white'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  🎓 Student Portal
-                </button>
-                <button
-                  type="button"
-                  onClick={() => {
-                    setLoginRole('admin_gate_da');
-                    setSelectedTier('admin_gate_da');
-                  }}
-                  className={`rounded-lg py-1.5 text-xs font-medium transition-all ${
-                    loginRole === 'admin_gate_da'
-                      ? 'bg-amber-500/20 text-amber-300 border border-amber-500/40'
-                      : 'text-zinc-400 hover:text-zinc-200'
-                  }`}
-                >
-                  ⚡ Admin GATE DA
-                </button>
-              </div>
-
               <div>
                 <label className="block text-xs font-medium text-zinc-300 mb-1">Email Address</label>
                 <input
@@ -2356,6 +2353,9 @@ export default function VedWorkbench() {
           <MicOff className="h-3.5 w-3.5" />
         </button>
       </motion.div>
+
+      {/* VED AI Student Progress Companion (Day 1+ Performance Mentor) */}
+      <VedCompanionChatbot session={session} />
     </div>
   );
 }

@@ -77,7 +77,7 @@ export default function TopNavBar({
             <TierSelectorPill onTierChange={onTierChange} />
           </div>
 
-          {/* Admin GATE DA Command Toggle */}
+          {/* IIT GATE DA Command Toggle */}
           <button
             onClick={() => toggleAdminMode()}
             className={`flex items-center gap-1.5 rounded-xl px-3 py-1.5 text-xs font-semibold transition-all cursor-pointer shadow-sm ${
@@ -85,10 +85,10 @@ export default function TopNavBar({
                 ? 'border border-rose-500/50 bg-rose-500/20 text-rose-300 shadow-[0_0_20px_rgba(244,63,94,0.25)] animate-pulse'
                 : 'border border-rose-500/30 bg-rose-500/10 text-rose-300 hover:border-rose-500/50 hover:bg-rose-500/15'
             }`}
-            title="Toggle Admin-Exclusive GATE DA Command Center"
+            title="Toggle IIT GATE DA Exam Simulator"
           >
             <Zap className={`h-3.5 w-3.5 ${isAdminMode ? 'text-rose-400 fill-rose-400' : 'text-rose-400'}`} />
-            <span className="hidden md:inline">GATE DA Admin</span>
+            <span className="hidden md:inline">IIT GATE DA</span>
             {isAdminMode && (
               <span className="rounded bg-rose-500/30 px-1 text-[9px] font-mono text-rose-200 uppercase">
                 Active

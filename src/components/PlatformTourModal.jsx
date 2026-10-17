@@ -48,7 +48,7 @@ export const PLATFORM_TOUR_STEPS = [
     highlights: [
       'Grades 1–5 (Primary): Playful 2-option discovery questions and visual counting blocks',
       'Grades 6–12: NCERT/CBSE/AP academic rigor with LaTeX equation skeletons and units',
-      'University CS/STEM & Admin GATE DA: Time/space complexity proofs and IIT question setters\' trap detection'
+      'University CS/STEM & IIT GATE DA: Time/space complexity proofs and IIT question setters\' trap detection'
     ],
     previewPill: 'Adaptive Scaffolding • 6 Tier Profiles'
   },

@@ -6,7 +6,7 @@ export const ACADEMIC_TIERS = [
   { id: 'tier_high', label: 'Grades 9–12', badge: 'High School STEM', short: 'G9–12' },
   { id: 'tier_undergrad', label: 'Undergrad (B.Tech)', badge: 'University Engg', short: 'UG' },
   { id: 'tier_masters', label: 'Master’s / Research', badge: 'Postgrad & R&D', short: 'MS/M.Tech' },
-  { id: 'admin_gate_da', label: '⚡ Admin: GATE DA', badge: 'IIT GATE DA Engine', short: 'GATE DA', isAdmin: true }
+  { id: 'admin_gate_da', label: 'IIT GATE DA Mastery', badge: 'IIT GATE DA Engine', short: 'GATE DA', isAdmin: false }
 ];
 
 export const GATE_DA_PILLARS = [
@@ -342,10 +342,10 @@ Exit 0 • Time: O((V + E) log V) • Space: O(V)`
         { type: 'search', label: 'GATE DA Syllabus: LIN_ALG + ML (SVD & PCA Variance)' },
         { type: 'terminal', label: 'Verified spectral trace shortcut -> < 35s solve time' }
       ],
-      summary: 'ADMIN GATE DA Engine active: High-rigor 2-Mark NAT/MCQ simulator with IIT distractor trap analysis.'
+      summary: 'IIT GATE DA Engine active: High-rigor 2-Mark NAT/MCQ simulator with IIT distractor trap analysis.'
     },
     socraticText: [
-      'Welcome back, Admin. I have loaded a 2-Mark GATE DA problem blending **Linear Algebra (SVD/Eigenvalues)** and **Machine Learning (PCA Variance Retention)** on your workbench.',
+      'Welcome back, Scholar. I have loaded a 2-Mark GATE DA problem blending **Linear Algebra (SVD/Eigenvalues)** and **Machine Learning (PCA Variance Retention)** on your workbench.',
       'Before computing the characteristic polynomial $\\det(\\Sigma - \\lambda I) = 0$, apply the **Matrix Trace & Rank Invariant** to find the percentage of variance captured by the first principal component in under 30 seconds.'
     ],
     formulaCallout: '\\text{Explained Variance Ratio (PC1)} = \\frac{\\lambda_{\\max}}{\\operatorname{Tr}(\\Sigma)} = \\frac{\\lambda_1}{\\lambda_1 + \\lambda_2 + \\lambda_3}',
@@ -357,7 +357,7 @@ Exit 0 • Time: O((V + E) log V) • Space: O(V)`
     artifact: {
       type: 'gate_da',
       title: 'GATE DA — 2-Mark Mock & Trap Decoder',
-      subtitle: 'Admin Exclusive • Linear Algebra & Machine Learning',
+      subtitle: 'IIT GATE DA Prep • Linear Algebra & Machine Learning',
       question: GATE_DA_PROBLEMS_BY_PILLAR.LIN_ALG
     }
   }
@@ -373,7 +373,7 @@ export async function queryVedCustomLlm({ userPrompt, activeTier, activeGatePill
     try {
       const systemInstruction = `You are ved.ai (Astra Engine), an AI tutor. Active Tier: ${activeTier}. ${
         activeTier === 'admin_gate_da'
-          ? `Admin GATE DA Mode active for pillar ${activeGatePillar}. Provide IIT GATE exam rigor, <60s shortcuts, and distractor trap analysis.`
+          ? `IIT GATE DA Mode active for pillar ${activeGatePillar}. Provide IIT GATE exam rigor, <60s shortcuts, and distractor trap analysis.`
           : `Follow Socratic Progressive Disclosure: never dump the final answer on Turn 1. Keep paragraphs <= 3 sentences.`
       }`;
 
