@@ -442,3 +442,15 @@ with tab1:
             
             st.session_state.current_placeholder = random.choice(prompt_ideas)
             st.rerun()
+
+# ============================================================================
+# Top-level exports for WSGI/Serverless runtime (Vercel Python detection fallback)
+# ============================================================================
+def handler(environ=None, start_response=None):
+    if callable(start_response):
+        start_response("200 OK", [("Content-Type", "text/plain")])
+        return [b"ved.ai backend service running"]
+    return {"statusCode": 200, "body": "ved.ai backend service running"}
+
+app = handler
+application = handler

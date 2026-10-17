@@ -1,0 +1,5 @@
+# Ignore legacy Python Streamlit prototype from Vercel deployment
+app.py
+requirements.txt
+.streamlit/
+*.py
