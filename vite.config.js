@@ -60,4 +60,12 @@ function authApiPlugin() {
 
 export default defineConfig({
   plugins: [react(), authApiPlugin()],
+  server: {
+    port: 3000,
+    strictPort: false,
+  },
+  preview: {
+    port: 3000,
+    strictPort: false,
+  },
 });

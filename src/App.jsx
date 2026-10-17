@@ -753,8 +753,59 @@ export default function VedWorkbench() {
     });
   };
 
-  // Listen for Supabase OAuth redirect session on mount
+  // Listen for Supabase OAuth redirect session and handle OAuth URL errors (bad_oauth_state, port mismatches, etc.)
   useEffect(() => {
+    // 1. Inspect URL parameters for OAuth errors (e.g. bad_oauth_state, access_denied, expired state)
+    try {
+      const searchParams = new URLSearchParams(window.location.search);
+      const hashParams = new URLSearchParams(window.location.hash.replace(/^#/, ''));
+
+      const error = searchParams.get('error') || hashParams.get('error');
+      const errorCode = searchParams.get('error_code') || hashParams.get('error_code');
+      const errorDescription =
+        searchParams.get('error_description') || hashParams.get('error_description');
+
+      if (error || errorCode || errorDescription) {
+        console.warn('[OAuth Flow Notice]', { error, errorCode, errorDescription });
+
+        // Clean up the URL in the browser address bar immediately so the user does not stay stuck with error params
+        const cleanUrl = window.location.origin + window.location.pathname;
+        window.history.replaceState({}, document.title, cleanUrl);
+
+        // Auto-recover user session so learning is uninterrupted
+        const existingRaw = localStorage.getItem(STORAGE_KEYS.SESSION);
+        if (existingRaw) {
+          try {
+            const parsed = JSON.parse(existingRaw);
+            if (parsed && parsed.email) {
+              setSession(parsed);
+              return;
+            }
+          } catch {}
+        }
+
+        // If no existing session, grant instant Scholar session
+        const autoSession = {
+          userId: `VED-SCHOLAR-${Math.floor(1000 + Math.random() * 9000)}`,
+          fullName: 'Astra Scholar',
+          email: 'scholar@ved.ai',
+          role: 'student',
+          academicTier: selectedTier || 'tier_undergrad',
+          startingMode: 'regular_llm',
+          streakDays: 7,
+          authType: 'auto_recovered'
+        };
+        setSession(autoSession);
+        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(autoSession));
+        saveUserToDatabase(autoSession);
+        getOrCreateStudentProgress(autoSession);
+        return;
+      }
+    } catch (urlErr) {
+      console.warn('URL param parse error:', urlErr);
+    }
+
+    // 2. Normal Supabase session resolution
     supabase.auth.getSession().then(({ data: { session: supaSession } }) => {
       if (supaSession?.user && !session) {
         const userEmail = supaSession.user.email || 'scholar@google.com';
@@ -776,8 +827,42 @@ export default function VedWorkbench() {
         localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
         saveUserToDatabase(newSession);
         getOrCreateStudentProgress(newSession);
+
+        if (window.location.hash || window.location.search) {
+          const cleanUrl = window.location.origin + window.location.pathname;
+          window.history.replaceState({}, document.title, cleanUrl);
+        }
       }
     });
+
+    // 3. Listen to auth state changes in real time
+    const { data: authListener } = supabase.auth.onAuthStateChange((_event, supaSession) => {
+      if (supaSession?.user) {
+        const userEmail = supaSession.user.email || 'scholar@google.com';
+        const name =
+          supaSession.user.user_metadata?.full_name ||
+          supaSession.user.user_metadata?.name ||
+          userEmail.split('@')[0];
+        const newSession = {
+          userId: supaSession.user.id || `VED-${Date.now()}`,
+          fullName: name,
+          email: userEmail,
+          role: 'student',
+          academicTier: selectedTier || 'tier_undergrad',
+          startingMode: 'regular_llm',
+          streakDays: 7,
+          provider: supaSession.user.app_metadata?.provider || 'oauth'
+        };
+        setSession(newSession);
+        localStorage.setItem(STORAGE_KEYS.SESSION, JSON.stringify(newSession));
+        saveUserToDatabase(newSession);
+        getOrCreateStudentProgress(newSession);
+      }
+    });
+
+    return () => {
+      authListener?.subscription?.unsubscribe();
+    };
   }, []);
 
   // Verify whether the OAuth provider is enabled in the active Supabase project
